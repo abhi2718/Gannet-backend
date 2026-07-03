@@ -25,6 +25,9 @@ export const errorHandler = (
   if (err instanceof ApiError) {
     statusCode = err.statusCode;
     message = err.message;
+  } else if (isJsonParseError(err)) {
+    statusCode = 400;
+    message = 'Invalid JSON payload in request body';
   } else if (err instanceof mongoose.Error.ValidationError) {
     statusCode = 400;
     message = Object.values(err.errors)
@@ -54,5 +57,15 @@ function isDuplicateKeyError(err: unknown): boolean {
     err !== null &&
     'code' in err &&
     (err as { code: number }).code === 11000
+  );
+}
+
+// body-parser throws a SyntaxError with a `body` property and status 400 when
+// the incoming JSON is malformed (e.g. a trailing comma left after editing).
+function isJsonParseError(err: unknown): boolean {
+  return (
+    err instanceof SyntaxError &&
+    'body' in err &&
+    (err as { status?: number }).status === 400
   );
 }

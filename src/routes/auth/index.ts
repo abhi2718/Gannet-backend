@@ -1,9 +1,9 @@
-import { Router } from 'express';
-import { authenticate } from '../../middlewares/auth';
-import { authRateLimiter } from '../../middlewares/rateLimiter';
-import { validate } from '../../middlewares/validate';
-import { login, me, register } from './controller';
-import { loginSchema, registerSchema } from './helpers';
+import { Router } from "express";
+import { authenticate } from "../../middlewares/auth";
+import { authRateLimiter } from "../../middlewares/rateLimiter";
+import { validate } from "../../middlewares/validate";
+import { login, me, register } from "./controller";
+import { loginSchema, registerSchema } from "./helpers";
 
 const router = Router();
 
@@ -29,7 +29,7 @@ const router = Router();
  *     responses:
  *       201: { description: User created }
  */
-router.post('/register', authRateLimiter, validate(registerSchema), register);
+router.post("/register", authRateLimiter, validate(registerSchema), register);
 
 /**
  * @openapi
@@ -51,7 +51,7 @@ router.post('/register', authRateLimiter, validate(registerSchema), register);
  *     responses:
  *       200: { description: Authenticated }
  */
-router.post('/login', authRateLimiter, validate(loginSchema), login);
+router.post("/login", authRateLimiter, validate(loginSchema), login);
 
 /**
  * @openapi
@@ -63,6 +63,6 @@ router.post('/login', authRateLimiter, validate(loginSchema), login);
  *       200: { description: Current user }
  *       401: { description: Unauthorized }
  */
-router.get('/me', authenticate, me);
+router.get("/me", authenticate, me);
 
 export default router;
