@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth';
+import orderRoutes from './order';
 import productRoutes from './product';
 import queryRoutes from './query';
 import userRoutes from './user';
@@ -24,5 +25,6 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/products', productRoutes);
 router.use('/queries', queryRoutes);
+router.use('/orders', orderRoutes);
 
 export default router;

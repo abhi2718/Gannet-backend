@@ -82,13 +82,26 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 - **Query** — `fullName`, `mobileNumber`, `email`, `city`, `requirement`,
   `message` (all required strings; `message` up to 2000 chars). Public pre-sales
   enquiries from the website popup form.
+- **Order** — `orderId` (auto, unique), `itemName`, `quantity`, `amount`,
+  `estimatedDelivery` (Date, default +7d), `status` (enum: `order placed` →
+  `confirmed` → `out for delivery` → `delivered`; default `order placed`),
+  `user` (owner ref). Customers see only their own orders; admins see all.
 
 ## API surface
 
 `/api/auth` (register, login, me) · `/api/users` (list*, get, patch, delete) ·
 `/api/products` (list*, create, get, patch, delete) ·
-`/api/queries` (**POST public+rate-limited**, list* admin) · `/api/health`.
-Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
+`/api/queries` (**POST public+rate-limited**, list* admin) ·
+`/api/orders` (my-list*, all-list*[admin], create, get, patch status[admin]) ·
+`/api/health`. Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
+
+## Owner-scoped access
+
+Some resources are scoped to their owner. Orders expose **two explicit list
+endpoints**: `GET /api/orders/my` returns only the caller's own orders (filter
+`{ user: id }`, any authenticated user); `GET /api/orders` returns **all** orders
+and is **admin-only** (`authorize(ADMIN)`, filter `{}`). Both are paginated. A
+customer fetching another user's order via `GET /api/orders/:id` gets 403.
 
 ## Public vs protected endpoints
 

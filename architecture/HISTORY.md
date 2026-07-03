@@ -15,6 +15,44 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Orders: split into explicit /my and admin-all endpoints
+- **What:** Replaced the single role-branching `GET /api/orders` with two
+  explicit endpoints: `GET /api/orders/my` (any authed user → own orders,
+  `listMyOrders`, filter `{ user: id }`) and `GET /api/orders` (admin-only →
+  all orders, `listAllOrders`, filter `{}`). Extracted a shared
+  `respondWithPaginatedOrders(filter, req, res)` helper in the controller.
+  `/my` is registered before `/:id` so it isn't captured as an id.
+- **Why:** User request — a user must access only his own orders (paginated) and
+  never another user's; admins access all orders (paginated). Two explicit APIs.
+- **Tests:** `tests/order.test.ts` — rewrote list tests: `/my` returns own
+  filter (customer and admin scoped to self); `limit<20` → 400; admin `/` lists
+  all with pagination; **customer `/` → 403**; admin `/?limit=5` → 400. Added
+  `GET /api/orders/my` → 401 to `protected-routes.test.ts`.
+- **Notes:** `GET /api/orders/:id` still enforces ownership (own or admin → 200,
+  else 403).
+
+## 2026-07-04 — Add Order module (owner-scoped + admin status)
+- **What:** New `order` resource. `models/order.model.ts` (`orderId` auto/unique,
+  `itemName`, `quantity`, `amount`, `estimatedDelivery` default +7d, `status`
+  enum `order placed|confirmed|out for delivery|delivered` default `order
+  placed`, `user` owner ref) + `OrderStatus` enum;
+  `routes/order/{helpers,controller,index}.ts`; mounted at `/api/orders`.
+  Endpoints: `POST /` (create for current user), `GET /` (paginated — customer
+  sees own via `{user:id}` filter, admin sees all `{}`), `GET /:id` (own or
+  admin, else 403), `PATCH /:id/status` (admin-only status transition).
+- **Why:** User request — orders with lifecycle status; each user sees only their
+  own orders (paginated), admins see all.
+- **Tests:** `tests/order.test.ts` — create success + user id + default status;
+  each required field missing → 400; quantity<1, negative amount, bad date → 400;
+  customer sees own (`find({user})`) vs admin sees all (`find({})`); pagination
+  defaults + custom + `limit<20` → 400; get own 200 / other's 403 / admin 200 /
+  404 / bad-id 400; status update admin 200 / invalid value 400 / 404 /
+  non-admin 403. Added order endpoints to `protected-routes.test.ts` (401).
+- **Notes:** Established the **owner-scoped access** pattern (branch on
+  `req.user.userType`; customers filtered to `{ user: id }`). `item` and
+  `itemName` collapsed to a single `itemName` field. `orderId` is a generated
+  business id distinct from Mongo `_id`.
+
 ## 2026-07-04 — Query: add required `message` field
 - **What:** Added `message` (required string, max 2000) to the Query model
   (interface + schema) and to `createQuerySchema` (Joi). Aligned Joi `requirement`
