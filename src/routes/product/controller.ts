@@ -16,11 +16,29 @@ export const createProduct = catchAsync(async (req: Request, res: Response) => {
 /**
  * GET /api/products — list all products.
  */
-export const listProducts = catchAsync(async (_req: Request, res: Response) => {
-  const products = await Product.find().sort({ createdAt: -1 });
-  res
-    .status(200)
-    .json({ success: true, count: products.length, data: products });
+export const listProducts = catchAsync(async (req: Request, res: Response) => {
+  const page = Number(req.query.page);
+  const limit = Number(req.query.limit);
+  const skip = (page - 1) * limit;
+
+  const [products, total] = await Promise.all([
+    Product.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Product.countDocuments(),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    count: products.length,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPrevPage: page > 1,
+    },
+    data: products,
+  });
 });
 
 /**

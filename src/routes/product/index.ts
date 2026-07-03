@@ -10,6 +10,7 @@ import {
 } from './controller';
 import {
   createProductSchema,
+  listProductsQuerySchema,
   productIdParamSchema,
   updateProductSchema,
 } from './helpers';
@@ -24,9 +25,16 @@ router.use(authenticate);
  * /api/products:
  *   get:
  *     tags: [Products]
- *     summary: List all products
+ *     summary: List products (paginated, page size >= 20)
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 20, maximum: 100, default: 20 }
  *     responses:
- *       200: { description: Array of products }
+ *       200: { description: Paginated list of products }
  *   post:
  *     tags: [Products]
  *     summary: Create a product
@@ -47,7 +55,7 @@ router.use(authenticate);
  */
 router
   .route('/')
-  .get(listProducts)
+  .get(validate(listProductsQuerySchema, 'query'), listProducts)
   .post(validate(createProductSchema), createProduct);
 
 /**

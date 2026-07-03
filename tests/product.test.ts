@@ -14,6 +14,7 @@ jest.mock('../src/models/product.model', () => ({
   Product: {
     create: jest.fn(),
     find: jest.fn(),
+    countDocuments: jest.fn(),
     findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
     findByIdAndDelete: jest.fn(),
@@ -64,16 +65,47 @@ describe('POST /api/products', () => {
   });
 });
 
-describe('GET /api/products', () => {
-  it('lists products', async () => {
+describe('GET /api/products (pagination)', () => {
+  it('returns page 1 with a default page size of 20', async () => {
     const query = makeQuery([{ id: 'p1', ...validBody }]);
     (Product.find as jest.Mock).mockReturnValue(query);
+    (Product.countDocuments as jest.Mock).mockResolvedValue(42);
 
     const res = await request(app).get('/api/products');
 
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(1);
-    expect(res.body.data).toHaveLength(1);
+    expect(res.body.pagination).toMatchObject({
+      total: 42,
+      page: 1,
+      limit: 20,
+      totalPages: 3,
+      hasNextPage: true,
+      hasPrevPage: false,
+    });
+    expect(query.skip).toHaveBeenCalledWith(0);
+    expect(query.limit).toHaveBeenCalledWith(20);
+  });
+
+  it('honours page and limit query params', async () => {
+    const query = makeQuery([{ id: 'p1', ...validBody }]);
+    (Product.find as jest.Mock).mockReturnValue(query);
+    (Product.countDocuments as jest.Mock).mockResolvedValue(100);
+
+    const res = await request(app).get('/api/products?page=3&limit=20');
+
+    expect(res.status).toBe(200);
+    expect(query.skip).toHaveBeenCalledWith(40);
+    expect(query.limit).toHaveBeenCalledWith(20);
+    expect(res.body.pagination.page).toBe(3);
+  });
+
+  it('rejects a page size below the minimum of 20', async () => {
+    const res = await request(app).get('/api/products?limit=5');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/limit/i);
+    expect(Product.find).not.toHaveBeenCalled();
   });
 });
 
