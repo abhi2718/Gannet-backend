@@ -3,7 +3,11 @@ import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { UserType } from '../../models/user.model';
 import { deleteUser, getUser, listUsers, updateUser } from './controller';
-import { updateUserSchema, userIdParamSchema } from './helpers';
+import {
+  listUsersQuerySchema,
+  updateUserSchema,
+  userIdParamSchema,
+} from './helpers';
 
 const router = Router();
 
@@ -15,11 +19,18 @@ router.use(authenticate);
  * /api/users:
  *   get:
  *     tags: [Users]
- *     summary: List all users
+ *     summary: List users (paginated, page size >= 20)
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 20, maximum: 100, default: 20 }
  *     responses:
- *       200: { description: Array of users }
+ *       200: { description: Paginated list of users }
  */
-router.get('/', listUsers);
+router.get('/', validate(listUsersQuerySchema, 'query'), listUsers);
 
 /**
  * @openapi

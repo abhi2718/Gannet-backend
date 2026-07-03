@@ -19,3 +19,15 @@ export const updateUserSchema = Joi.object({
     .valid(...Object.values(UserType))
     .optional(),
 }).min(1);
+
+// Pagination query params. Page size defaults to 20 and is never below 20.
+export const DEFAULT_PAGE_SIZE = 20;
+
+export const listUsersQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number()
+    .integer()
+    .min(DEFAULT_PAGE_SIZE)
+    .max(100)
+    .default(DEFAULT_PAGE_SIZE),
+});

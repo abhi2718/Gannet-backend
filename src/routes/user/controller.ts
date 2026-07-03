@@ -4,11 +4,32 @@ import { ApiError } from '../../utils/ApiError';
 import { catchAsync } from '../../utils/catchAsync';
 
 /**
- * GET /api/users — list all users.
+ * GET /api/users — list users with pagination (default/min page size 20).
+ * The `page` and `limit` query params are validated & defaulted upstream.
  */
-export const listUsers = catchAsync(async (_req: Request, res: Response) => {
-  const users = await User.find().sort({ createdAt: -1 });
-  res.status(200).json({ success: true, count: users.length, data: users });
+export const listUsers = catchAsync(async (req: Request, res: Response) => {
+  const page = Number(req.query.page);
+  const limit = Number(req.query.limit);
+  const skip = (page - 1) * limit;
+
+  const [users, total] = await Promise.all([
+    User.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+    User.countDocuments(),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    count: users.length,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPrevPage: page > 1,
+    },
+    data: users,
+  });
 });
 
 /**
