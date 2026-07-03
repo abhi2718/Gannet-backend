@@ -1,0 +1,81 @@
+# Folder Structure & "Where do I change X?"
+
+Use this map to find the most relevant file **before** editing. Keep the tree in
+sync when you add files.
+
+## Tree
+
+```
+gannet/
+├── CLAUDE.md                     # Read-first workflow & rules
+├── architecture/                 # ← design docs (this folder)
+│   ├── ARCHITECTURE.md           # System design & decisions
+│   ├── FOLDER_STRUCTURE.md       # This file
+│   ├── CONVENTIONS.md            # Naming, rules, patterns
+│   └── HISTORY.md                # Append-only change log
+├── src/
+│   ├── index.ts                  # Entry: DB connect + server bootstrap
+│   ├── app.ts                    # Express app assembly (middleware order)
+│   ├── config/
+│   │   ├── env.ts                # Joi-validated env (only place to read env)
+│   │   ├── db.ts                 # Mongo connect/disconnect
+│   │   └── swagger.ts            # Swagger setup (/api-docs)
+│   ├── middlewares/
+│   │   ├── auth.ts               # authenticate (JWT) + authorize (roles)
+│   │   ├── validate.ts           # Joi validation middleware
+│   │   ├── rateLimiter.ts        # apiRateLimiter + authRateLimiter
+│   │   ├── notFound.ts           # 404 handler
+│   │   └── errorHandler.ts       # Global error handler (registered last)
+│   ├── models/
+│   │   ├── user.model.ts         # User schema + hashing + comparePassword
+│   │   └── product.model.ts      # Product schema
+│   ├── routes/
+│   │   ├── index.ts              # Route aggregator + /health
+│   │   ├── auth/    { index.ts, controller.ts, helpers.ts }
+│   │   ├── user/    { index.ts, controller.ts, helpers.ts }
+│   │   └── product/ { index.ts, controller.ts, helpers.ts }
+│   ├── utils/
+│   │   ├── ApiError.ts           # Typed HTTP error class
+│   │   ├── catchAsync.ts         # Async handler wrapper
+│   │   └── jwt.ts                # signToken / verifyToken (sub = userId)
+│   └── types/
+│       └── express.d.ts          # Request.user augmentation
+├── tests/
+│   ├── auth.test.ts              # Auth routes + JSON-error + validation
+│   ├── user.test.ts              # User routes + pagination
+│   ├── product.test.ts           # Product routes + pagination
+│   ├── protected-routes.test.ts  # Real auth guard → 401 checks
+│   └── helpers/mockQuery.ts      # Chainable+awaitable Mongoose query mock
+├── eslint.config.mjs             # Flat ESLint (max-lines 200, no-unused-vars)
+├── jest.config.js                # ts-jest config
+├── tsconfig.json                 # strict; ts-node files:true
+└── .husky/pre-commit             # lint + test gate
+```
+
+## Where do I change X?
+
+| I want to… | Change here |
+| --- | --- |
+| Add a new resource/route | New `src/routes/<name>/{index,controller,helpers}.ts` + mount in `src/routes/index.ts` + add tests + update HISTORY |
+| Add/adjust request validation | That route's `helpers.ts` (Joi schema) |
+| Change business logic for an endpoint | That route's `controller.ts` |
+| Add/change a URL, middleware order, or Swagger doc for a route | That route's `index.ts` |
+| Change a DB field / schema | `src/models/<entity>.model.ts` |
+| Change auth / token behaviour | `src/middlewares/auth.ts` and/or `src/utils/jwt.ts` |
+| Change how errors are shaped | `src/middlewares/errorHandler.ts` (+ `src/utils/ApiError.ts`) |
+| Change rate limits | `src/middlewares/rateLimiter.ts` |
+| Add an env var | `src/config/env.ts` (schema) + `.env.example` + `.env` |
+| Change global middleware or mounting | `src/app.ts` |
+| Change pagination defaults | The list route's `helpers.ts` query schema + its `controller.ts` |
+| Add a shared helper/util | `src/utils/` |
+| Add an ambient TS type | `src/types/` |
+
+## Naming conventions (quick reference)
+
+- Route folders: lowercase singular (`user`, `product`, `auth`).
+- Models: `<entity>.model.ts`; exported model PascalCase (`User`, `Product`).
+- Joi schemas: `<action><Entity>Schema` (e.g. `createProductSchema`,
+  `listUsersQuerySchema`).
+- Tests: `<area>.test.ts` under `tests/`.
+
+Full rules in [`CONVENTIONS.md`](CONVENTIONS.md).
