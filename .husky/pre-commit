@@ -1,0 +1,13 @@
+echo "🔍 Running ESLint..."
+npm run lint || {
+  echo "❌ ESLint failed. Commit aborted."
+  exit 1
+}
+
+echo "🧪 Running unit tests..."
+npm test || {
+  echo "❌ Tests failed. Commit aborted."
+  exit 1
+}
+
+echo "✅ Lint and tests passed."
