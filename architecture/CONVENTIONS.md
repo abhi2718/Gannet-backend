@@ -115,6 +115,20 @@ skim `HISTORY.md`. Then, for every new/changed module:
 6. **Verdict:** COMPLETE only if lint + all tests pass; otherwise NOT complete —
    fix and repeat from the failing step.
 
+## 10a. Search & filtering (list endpoints)
+
+- Accept search/filter values as **validated query params** (add them to the
+  list query schema so `validate` keeps them and rejects bad values, e.g. an
+  out-of-enum `status`).
+- Partial text search → case-insensitive regex, but **escape user input first**
+  (`escapeRegex`) to avoid regex injection/ReDoS. Exact filters (enums, ids) →
+  direct equality. Build a single Mongo `filter` object and pass the same filter
+  to both `find(filter)` and `countDocuments(filter)` so pagination totals match.
+- **Type-ahead / single search box:** accept one `search` param and match it
+  against multiple fields with `$or: [{ fieldA: rx }, { fieldB: rx }, ...]`. The
+  client may call the endpoint on each keystroke.
+- See `routes/query/controller.ts` (`buildQueryFilter`) for the reference.
+
 ## 10. Documentation
 
 - Every route gets an `@openapi` JSDoc block in its `index.ts`.

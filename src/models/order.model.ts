@@ -1,18 +1,21 @@
 import { Document, model, Schema, Types } from 'mongoose';
 
 /**
- * Order lifecycle stages. An order moves through these in sequence.
+ * Order lifecycle stages. An order moves through these (or is cancelled).
  */
 export enum OrderStatus {
-  ORDER_PLACED = 'order placed',
+  PENDING = 'pending',
   CONFIRMED = 'confirmed',
   OUT_FOR_DELIVERY = 'out for delivery',
   DELIVERED = 'delivered',
+  CANCELLED = 'cancelled',
 }
 
 export interface IOrder extends Document {
   orderId: string;
-  itemName: string;
+  customerName: string;
+  customerPhone: string;
+  bottleSize: string;
   quantity: number;
   amount: number;
   estimatedDelivery: Date;
@@ -37,12 +40,25 @@ const orderSchema = new Schema<IOrder>(
       unique: true,
       default: generateOrderId,
     },
-    // `item` and `itemName` are the same thing — stored once as itemName.
-    itemName: {
+    customerName: {
       type: String,
       required: true,
       trim: true,
       maxlength: 120,
+      index: true,
+    },
+    customerPhone: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    bottleSize: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 60,
+      index: true,
     },
     quantity: {
       type: Number,
@@ -62,7 +78,8 @@ const orderSchema = new Schema<IOrder>(
     status: {
       type: String,
       enum: Object.values(OrderStatus),
-      default: OrderStatus.ORDER_PLACED,
+      default: OrderStatus.PENDING,
+      index: true,
     },
     user: {
       type: Schema.Types.ObjectId,

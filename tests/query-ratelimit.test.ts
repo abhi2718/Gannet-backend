@@ -2,10 +2,14 @@ import request from 'supertest';
 
 // NOTE: this suite intentionally uses the REAL queryRateLimiter to prove that a
 // single client cannot spam the public endpoint. Only the model is mocked.
-jest.mock('../src/models/query.model', () => ({
-  __esModule: true,
-  Query: { create: jest.fn() },
-}));
+jest.mock('../src/models/query.model', () => {
+  const actual = jest.requireActual('../src/models/query.model');
+  return {
+    __esModule: true,
+    ...actual,
+    Query: { create: jest.fn() },
+  };
+});
 
 import { createApp } from '../src/app';
 import { Query } from '../src/models/query.model';

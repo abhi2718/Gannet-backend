@@ -4,15 +4,18 @@ import { validate } from '../../middlewares/validate';
 import { UserType } from '../../models/user.model';
 import {
   createOrder,
+  deleteOrder,
   getOrder,
   listAllOrders,
   listMyOrders,
+  updateOrder,
   updateOrderStatus,
 } from './controller';
 import {
   createOrderSchema,
   listOrdersQuerySchema,
   orderIdParamSchema,
+  updateOrderSchema,
   updateOrderStatusSchema,
 } from './helpers';
 
@@ -26,7 +29,7 @@ router.use(authenticate);
  * /api/orders:
  *   get:
  *     tags: [Orders]
- *     summary: List ALL orders (admin only, paginated)
+ *     summary: List ALL orders (admin only; paginated, searchable, filterable)
  *     parameters:
  *       - in: query
  *         name: page
@@ -34,6 +37,21 @@ router.use(authenticate);
  *       - in: query
  *         name: limit
  *         schema: { type: integer, minimum: 20, maximum: 100, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Term matched against customer name OR phone OR bottle size
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, confirmed, out for delivery, delivered, cancelled]
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200: { description: Paginated list of all orders }
  *       403: { description: Forbidden (not an admin) }
@@ -46,9 +64,11 @@ router.use(authenticate);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [itemName, quantity, amount]
+ *             required: [customerName, customerPhone, bottleSize, quantity, amount]
  *             properties:
- *               itemName: { type: string }
+ *               customerName: { type: string }
+ *               customerPhone: { type: string }
+ *               bottleSize: { type: string }
  *               quantity: { type: integer, minimum: 1 }
  *               amount: { type: number, minimum: 0 }
  *               estimatedDelivery: { type: string, format: date-time }
@@ -69,7 +89,7 @@ router
  * /api/orders/my:
  *   get:
  *     tags: [Orders]
- *     summary: List the current user's own orders (paginated)
+ *     summary: List the current user's own orders (paginated, searchable)
  *     parameters:
  *       - in: query
  *         name: page
@@ -77,6 +97,21 @@ router
  *       - in: query
  *         name: limit
  *         schema: { type: integer, minimum: 20, maximum: 100, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Term matched against customer name OR phone OR bottle size
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, confirmed, out for delivery, delivered, cancelled]
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200: { description: Paginated list of the caller's orders }
  */
@@ -98,8 +133,61 @@ router.get('/my', validate(listOrdersQuerySchema, 'query'), listMyOrders);
  *       200: { description: The order }
  *       403: { description: Not your order }
  *       404: { description: Not found }
+ *   patch:
+ *     tags: [Orders]
+ *     summary: Edit an order (admin only)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               customerName: { type: string }
+ *               customerPhone: { type: string }
+ *               bottleSize: { type: string }
+ *               quantity: { type: integer, minimum: 1 }
+ *               amount: { type: number, minimum: 0 }
+ *               estimatedDelivery: { type: string, format: date-time }
+ *               status:
+ *                 type: string
+ *                 enum: [pending, confirmed, out for delivery, delivered, cancelled]
+ *     responses:
+ *       200: { description: Updated order }
+ *       403: { description: Forbidden }
+ *       404: { description: Not found }
+ *   delete:
+ *     tags: [Orders]
+ *     summary: Delete an order (admin only)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Deleted }
+ *       403: { description: Forbidden }
+ *       404: { description: Not found }
  */
-router.get('/:id', validate(orderIdParamSchema, 'params'), getOrder);
+router
+  .route('/:id')
+  .get(validate(orderIdParamSchema, 'params'), getOrder)
+  .patch(
+    authorize(UserType.ADMIN),
+    validate(orderIdParamSchema, 'params'),
+    validate(updateOrderSchema),
+    updateOrder
+  )
+  .delete(
+    authorize(UserType.ADMIN),
+    validate(orderIdParamSchema, 'params'),
+    deleteOrder
+  );
 
 /**
  * @openapi
@@ -122,7 +210,7 @@ router.get('/:id', validate(orderIdParamSchema, 'params'), getOrder);
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [order placed, confirmed, out for delivery, delivered]
+ *                 enum: [pending, confirmed, out for delivery, delivered, cancelled]
  *     responses:
  *       200: { description: Updated order }
  *       403: { description: Forbidden }

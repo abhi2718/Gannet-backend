@@ -37,6 +37,7 @@ jest.mock('../src/models/order.model', () => {
       countDocuments: jest.fn(),
       findById: jest.fn(),
       findByIdAndUpdate: jest.fn(),
+      findByIdAndDelete: jest.fn(),
     },
   };
 });
@@ -47,7 +48,13 @@ import { makeQuery } from './helpers/mockQuery';
 
 const app = createApp();
 const VALID_ID = '507f1f77bcf86cd799439011';
-const validBody = { itemName: 'Widget', quantity: 2, amount: 49.99 };
+const validBody = {
+  customerName: 'John Doe',
+  customerPhone: '+12025550123',
+  bottleSize: '20L',
+  quantity: 2,
+  amount: 49.99,
+};
 
 beforeEach(() => {
   mockAuthState.user = { id: 'user1', userType: 'customer' };
@@ -58,7 +65,7 @@ describe('POST /api/orders', () => {
     (Order.create as jest.Mock).mockResolvedValue({
       id: 'o1',
       ...validBody,
-      status: OrderStatus.ORDER_PLACED,
+      status: OrderStatus.PENDING,
     });
 
     const res = await request(app).post('/api/orders').send(validBody);
@@ -69,7 +76,7 @@ describe('POST /api/orders', () => {
     );
   });
 
-  it.each(['itemName', 'quantity', 'amount'])(
+  it.each(['customerName', 'customerPhone', 'bottleSize', 'quantity', 'amount'])(
     'rejects when required field "%s" is missing',
     async (field) => {
       const body: Record<string, unknown> = { ...validBody };
@@ -135,6 +142,31 @@ describe('GET /api/orders/my (own orders, paginated)', () => {
     expect(res.status).toBe(400);
     expect(Order.find).not.toHaveBeenCalled();
   });
+
+  it('searches own orders by name/phone/bottleSize + status + date', async () => {
+    const query = makeQuery([]);
+    (Order.find as jest.Mock).mockReturnValue(query);
+    (Order.countDocuments as jest.Mock).mockResolvedValue(0);
+
+    await request(app).get(
+      '/api/orders/my?search=John&status=confirmed' +
+        '&dateFrom=2026-01-01&dateTo=2026-12-31'
+    );
+
+    const arg = (Order.find as jest.Mock).mock.calls[0][0];
+    expect(arg.user).toBe('user1');
+    expect(arg.status).toBe('confirmed');
+    expect(arg.$or).toHaveLength(3);
+    expect(arg.$or[0].customerName.$regex).toBe('John');
+    expect(arg.createdAt.$gte).toBeInstanceOf(Date);
+    expect(arg.createdAt.$lte).toBeInstanceOf(Date);
+  });
+
+  it('rejects an invalid status filter value', async () => {
+    const res = await request(app).get('/api/orders/my?status=shipped');
+    expect(res.status).toBe(400);
+    expect(Order.find).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/orders (all orders, admin only)', () => {
@@ -150,6 +182,19 @@ describe('GET /api/orders (all orders, admin only)', () => {
     expect(Order.find).toHaveBeenCalledWith({});
     expect(query.skip).toHaveBeenCalledWith(25);
     expect(query.limit).toHaveBeenCalledWith(25);
+  });
+
+  it('lets an admin search across all orders', async () => {
+    mockAuthState.user = { id: 'admin1', userType: 'admin' };
+    const query = makeQuery([]);
+    (Order.find as jest.Mock).mockReturnValue(query);
+    (Order.countDocuments as jest.Mock).mockResolvedValue(0);
+
+    await request(app).get('/api/orders?search=9876543210');
+
+    const arg = (Order.find as jest.Mock).mock.calls[0][0];
+    expect(arg.user).toBeUndefined();
+    expect(arg.$or[1].customerPhone.$regex).toBe('9876543210');
   });
 
   it('forbids a customer from listing all orders', async () => {
@@ -246,5 +291,93 @@ describe('PATCH /api/orders/:id/status', () => {
       .send({ status: 'confirmed' });
     expect(res.status).toBe(403);
     expect(Order.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/orders/:id (admin edit)', () => {
+  beforeEach(() => {
+    mockAuthState.user = { id: 'admin1', userType: 'admin' };
+  });
+
+  it('lets an admin edit order fields', async () => {
+    (Order.findByIdAndUpdate as jest.Mock).mockResolvedValue({
+      id: 'o1',
+      bottleSize: '10L',
+      status: 'cancelled',
+    });
+
+    const res = await request(app)
+      .patch(`/api/orders/${VALID_ID}`)
+      .send({ bottleSize: '10L', status: 'cancelled' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('cancelled');
+  });
+
+  it('rejects an empty update body', async () => {
+    const res = await request(app).patch(`/api/orders/${VALID_ID}`).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an invalid status', async () => {
+    const res = await request(app)
+      .patch(`/api/orders/${VALID_ID}`)
+      .send({ status: 'shipped' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when editing a missing order', async () => {
+    (Order.findByIdAndUpdate as jest.Mock).mockResolvedValue(null);
+    const res = await request(app)
+      .patch(`/api/orders/${VALID_ID}`)
+      .send({ amount: 10 });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for a malformed id', async () => {
+    const res = await request(app)
+      .patch('/api/orders/not-an-id')
+      .send({ amount: 10 });
+    expect(res.status).toBe(400);
+  });
+
+  it('forbids a non-admin from editing', async () => {
+    mockAuthState.user = { id: 'user1', userType: 'customer' };
+    const res = await request(app)
+      .patch(`/api/orders/${VALID_ID}`)
+      .send({ amount: 10 });
+    expect(res.status).toBe(403);
+    expect(Order.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/orders/:id (admin)', () => {
+  beforeEach(() => {
+    mockAuthState.user = { id: 'admin1', userType: 'admin' };
+  });
+
+  it('lets an admin delete an order', async () => {
+    (Order.findByIdAndDelete as jest.Mock).mockResolvedValue({ id: 'o1' });
+    const res = await request(app).delete(`/api/orders/${VALID_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('returns 404 when deleting a missing order', async () => {
+    (Order.findByIdAndDelete as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).delete(`/api/orders/${VALID_ID}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for a malformed id', async () => {
+    const res = await request(app).delete('/api/orders/not-an-id');
+    expect(res.status).toBe(400);
+  });
+
+  it('forbids a non-admin from deleting', async () => {
+    mockAuthState.user = { id: 'user1', userType: 'customer' };
+    const res = await request(app).delete(`/api/orders/${VALID_ID}`);
+    expect(res.status).toBe(403);
+    expect(Order.findByIdAndDelete).not.toHaveBeenCalled();
   });
 });

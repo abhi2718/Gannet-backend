@@ -80,19 +80,24 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
   `userType` (`admin` | `customer`). `comparePassword()` method.
 - **Product** — `productName`, `url`, `price`, `description`, `createdBy` (User ref).
 - **Query** — `fullName`, `mobileNumber`, `email`, `city`, `requirement`,
-  `message` (all required strings; `message` up to 2000 chars). Public pre-sales
-  enquiries from the website popup form.
-- **Order** — `orderId` (auto, unique), `itemName`, `quantity`, `amount`,
-  `estimatedDelivery` (Date, default +7d), `status` (enum: `order placed` →
-  `confirmed` → `out for delivery` → `delivered`; default `order placed`),
-  `user` (owner ref). Customers see only their own orders; admins see all.
+  `message` (all required strings; `message` up to 2000 chars), `status`
+  (enum `new` | `contacted` | `converted`, default `new`), plus `createdAt`
+  (date of the enquiry, from timestamps). Public submission; admins can list
+  (search/filter), edit, and delete.
+- **Order** — `orderId` (auto, unique), `customerName`, `customerPhone`,
+  `bottleSize`, `quantity`, `amount`, `estimatedDelivery` (Date, default +7d),
+  `status` (enum: `pending` → `confirmed` → `out for delivery` → `delivered`, or
+  `cancelled`; default `pending`), `user` (owner ref). Customers see only their
+  own orders; admins see all, and can edit/delete any order. Lists are
+  searchable (name/phone/bottleSize) and filterable (status, date range).
 
 ## API surface
 
 `/api/auth` (register, login, me) · `/api/users` (list*, get, patch, delete) ·
 `/api/products` (list*, create, get, patch, delete) ·
-`/api/queries` (**POST public+rate-limited**, list* admin) ·
-`/api/orders` (my-list*, all-list*[admin], create, get, patch status[admin]) ·
+`/api/queries` (**POST public+rate-limited**, list*+single-term-search+status-filter/edit/delete admin) ·
+`/api/orders` (my-list*, all-list*[admin], create, get, edit[admin],
+patch-status[admin], delete[admin]; lists searchable+filterable) ·
 `/api/health`. Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
 
 ## Owner-scoped access

@@ -15,6 +15,27 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Orders: search/filter + admin edit/delete + status enum
+- **What:** (1) Expanded `OrderStatus` to `pending` (new default) | `confirmed` |
+  `out for delivery` | `delivered` | `cancelled`. (2) Replaced generic `itemName`
+  with domain fields `customerName`, `customerPhone`, `bottleSize` (all required,
+  indexed) so orders are searchable. (3) Both list endpoints now accept a single
+  `search` term ($or over customerName/customerPhone/bottleSize, regex-escaped),
+  a `status` filter, and a `dateFrom`/`dateTo` range on `createdAt` — merged with
+  the ownership base filter in `respondWithPaginatedOrders`. (4) New admin
+  endpoints: `PATCH /api/orders/:id` (full edit, `updateOrderSchema`, min 1) and
+  `DELETE /api/orders/:id`. Kept `PATCH /api/orders/:id/status`.
+- **Why:** User request — search orders by customer name/phone/bottle size, filter
+  by date and status (incl. cancelled), and let admins review/edit and delete.
+- **Tests:** `tests/order.test.ts` — new fields in validBody + required matrix;
+  default status `pending`; `/my` and admin `/` search build ($or + status +
+  date range) + invalid status → 400; PATCH `/:id` edit success/empty-body/
+  invalid-status/404/bad-id/non-admin-403; DELETE `/:id` success/404/bad-id/
+  non-admin-403. Added PATCH+DELETE `/api/orders/:id` → 401 to protected-routes.
+- **Notes:** `bottleSize` replaces `itemName` (domain rename). Search follows the
+  type-ahead $or convention (CONVENTIONS §10a). `index.ts` exceeds 200 raw lines
+  but is mostly @openapi comments (max-lines skips comments/blanks).
+
 ## 2026-07-04 — Orders: split into explicit /my and admin-all endpoints
 - **What:** Replaced the single role-branching `GET /api/orders` with two
   explicit endpoints: `GET /api/orders/my` (any authed user → own orders,
@@ -52,6 +73,36 @@ skim this for precedent before making similar changes.
   `req.user.userType`; customers filtered to `{ user: id }`). `item` and
   `itemName` collapsed to a single `itemName` field. `orderId` is a generated
   business id distinct from Mongo `_id`.
+
+## 2026-07-04 — Query: single-term ($or) search for type-ahead
+- **What:** Replaced the four separate search params (name/mobile/email/city)
+  on `GET /api/queries` with a single `search` param that matches (case-
+  insensitively, regex-escaped) against ANY of fullName/mobileNumber/email/city
+  via `$or`. `status` filter unchanged. Updated `buildQueryFilter`, the list
+  query schema, and Swagger.
+- **Why:** User request — one search box; typing anything should match name OR
+  mobile OR email OR city (client calls the API on each keystroke).
+- **Tests:** `tests/query.test.ts` — search builds a 4-way `$or`; search+status
+  combine; regex metachars escaped; invalid status → 400.
+- **Notes:** Extended CONVENTIONS §10a with the type-ahead single-search pattern.
+
+## 2026-07-04 — Query: status + admin edit/delete + search/filter
+- **What:** Added `QueryStatus` enum (`new` | `contacted` | `converted`, default
+  `new`, indexed) + `status` field to `models/query.model.ts` (date of query =
+  `createdAt` from timestamps). New admin endpoints: `PATCH /api/queries/:id`
+  (edit any fields + status, `updateQuerySchema`, min 1) and
+  `DELETE /api/queries/:id`. `GET /api/queries` now supports search
+  (partial, case-insensitive on name/mobile/email/city) and `status` filter via
+  `buildQueryFilter` in the controller (regex-escaped). Added `queryIdParamSchema`.
+- **Why:** User request — track enquiry lifecycle, let admins manage (edit/
+  delete) enquiries, and search/filter them.
+- **Tests:** `tests/query.test.ts` — search filter build + regex escaping +
+  invalid status → 400; PATCH update/invalid status/empty body/404/bad-id;
+  DELETE success/404/bad-id. Added PATCH+DELETE `/api/queries/:id` → 401 to
+  `protected-routes.test.ts`. Fixed both query test mocks to keep `QueryStatus`
+  (helpers now imports it) via `requireActual`.
+- **Notes:** Established the **search & filtering** convention (CONVENTIONS §10a):
+  validated query params + escaped regex + shared filter for find/count.
 
 ## 2026-07-04 — Query: add required `message` field
 - **What:** Added `message` (required string, max 2000) to the Query model
