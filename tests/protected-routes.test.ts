@@ -18,6 +18,9 @@ describe('Protected routes require authentication', () => {
     ['get', '/api/products/507f1f77bcf86cd799439011'],
     ['patch', '/api/products/507f1f77bcf86cd799439011'],
     ['delete', '/api/products/507f1f77bcf86cd799439011'],
+    // Public query submission (POST) is intentionally excluded; only the
+    // admin-only list of queries requires auth.
+    ['get', '/api/queries'],
     ['get', '/api/auth/me'],
   ];
 

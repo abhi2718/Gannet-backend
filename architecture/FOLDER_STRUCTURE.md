@@ -28,12 +28,14 @@ gannet/
 │   │   └── errorHandler.ts       # Global error handler (registered last)
 │   ├── models/
 │   │   ├── user.model.ts         # User schema + hashing + comparePassword
-│   │   └── product.model.ts      # Product schema
+│   │   ├── product.model.ts      # Product schema
+│   │   └── query.model.ts        # Query (public enquiry) schema
 │   ├── routes/
 │   │   ├── index.ts              # Route aggregator + /health
 │   │   ├── auth/    { index.ts, controller.ts, helpers.ts }
 │   │   ├── user/    { index.ts, controller.ts, helpers.ts }
-│   │   └── product/ { index.ts, controller.ts, helpers.ts }
+│   │   ├── product/ { index.ts, controller.ts, helpers.ts }
+│   │   └── query/   { index.ts, controller.ts, helpers.ts }  # public POST + admin list
 │   ├── utils/
 │   │   ├── ApiError.ts           # Typed HTTP error class
 │   │   ├── catchAsync.ts         # Async handler wrapper
@@ -44,6 +46,8 @@ gannet/
 │   ├── auth.test.ts              # Auth routes + JSON-error + validation
 │   ├── user.test.ts              # User routes + pagination
 │   ├── product.test.ts           # Product routes + pagination
+│   ├── query.test.ts             # Query routes (public POST + admin list)
+│   ├── query-ratelimit.test.ts   # Real queryRateLimiter → 429 after 5
 │   ├── protected-routes.test.ts  # Real auth guard → 401 checks
 │   └── helpers/mockQuery.ts      # Chainable+awaitable Mongoose query mock
 ├── eslint.config.mjs             # Flat ESLint (max-lines 200, no-unused-vars)

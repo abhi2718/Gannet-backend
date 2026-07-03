@@ -15,6 +15,37 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Query: add required `message` field
+- **What:** Added `message` (required string, max 2000) to the Query model
+  (interface + schema) and to `createQuerySchema` (Joi). Aligned Joi `requirement`
+  max to the model (120). Updated Swagger required/properties and the Query model
+  entry in `ARCHITECTURE.md`.
+- **Why:** User request — enquiries must include a message body (max 2000 chars).
+- **Tests:** `tests/query.test.ts` — added `message` to `validBody` and to the
+  required-field matrix, plus a `message > 2000 chars → 400` boundary test;
+  updated `query-ratelimit.test.ts` body. Result below.
+- **Notes:** Kept `requirement` at 120 to match the model (the schema value the
+  user set); flagged for confirmation.
+
+## 2026-07-04 — Add public Query (enquiry) module
+- **What:** New `query` resource. `models/query.model.ts` (fullName,
+  mobileNumber, email, city, requirement — all required strings);
+  `routes/query/{helpers,controller,index}.ts`; mounted at `/api/queries` in
+  `routes/index.ts`. `POST /api/queries` is **public (no auth)** and rate-limited;
+  `GET /api/queries` is admin-only + paginated. Added `queryRateLimiter`
+  (5 submissions/hour per IP) to `middlewares/rateLimiter.ts`.
+- **Why:** Website visitors submit enquiries via a popup form without logging in;
+  needs spam protection via rate limiting.
+- **Tests:** `tests/query.test.ts` (public POST success without token; each of
+  the 5 required fields missing → 400; invalid email; invalid mobile; unknown
+  fields stripped; malformed JSON → 400; admin list pagination defaults, custom
+  page/limit, `limit<20` → 400) and `tests/query-ratelimit.test.ts` (real
+  limiter: 5×201 then 429 + message). Added `GET /api/queries` → 401 to
+  `tests/protected-routes.test.ts`. Result below.
+- **Notes:** Followed the standard route pattern + pagination convention.
+  Rate-limit suite lives in its own file so the real singleton limiter is
+  isolated; the functional suite mocks `rateLimiter` to a passthrough.
+
 ## 2026-07-04 — Codify Definition of Done + edge-case testing
 - **What:** Rewrote the workflow in `CLAUDE.md` into two explicit phases —
   STEP A (read architecture + all rules before generating any module) and STEP B

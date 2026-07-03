@@ -79,9 +79,20 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 - **User** — `username`, `email` (unique), `password` (hashed, `select:false`),
   `userType` (`admin` | `customer`). `comparePassword()` method.
 - **Product** — `productName`, `url`, `price`, `description`, `createdBy` (User ref).
+- **Query** — `fullName`, `mobileNumber`, `email`, `city`, `requirement`,
+  `message` (all required strings; `message` up to 2000 chars). Public pre-sales
+  enquiries from the website popup form.
 
 ## API surface
 
 `/api/auth` (register, login, me) · `/api/users` (list*, get, patch, delete) ·
-`/api/products` (list*, create, get, patch, delete) · `/api/health`.
+`/api/products` (list*, create, get, patch, delete) ·
+`/api/queries` (**POST public+rate-limited**, list* admin) · `/api/health`.
 Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
+
+## Public vs protected endpoints
+
+Most routes require a JWT. Exceptions (`security: []`): `POST /api/auth/register`,
+`POST /api/auth/login`, `GET /api/health`, and **`POST /api/queries`** — the
+public enquiry form. Public write endpoints must be rate-limited; `POST
+/api/queries` uses a dedicated strict `queryRateLimiter` (5/hour per IP).
