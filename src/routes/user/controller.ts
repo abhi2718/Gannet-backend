@@ -2,24 +2,27 @@ import { Request, Response } from 'express';
 import { User } from '../../models/user.model';
 import { ApiError } from '../../utils/ApiError';
 import { catchAsync } from '../../utils/catchAsync';
+import { buildUserListPipeline } from './helpers';
 
 /**
- * GET /api/users — list users with pagination (default/min page size 20).
- * The `page` and `limit` query params are validated & defaulted upstream.
+ * GET /api/users — admin-only. Lists users with their name, email, phone, city,
+ * join date (createdAt), order count and status, searchable across those fields
+ * and filterable by status. Paginated (default/min page size 20). Uses an
+ * aggregation that joins the order & address collections; see helpers.ts.
  */
 export const listUsers = catchAsync(async (req: Request, res: Response) => {
   const page = Number(req.query.page);
   const limit = Number(req.query.limit);
   const skip = (page - 1) * limit;
 
-  const [users, total] = await Promise.all([
-    User.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
-    User.countDocuments(),
-  ]);
+  const pipeline = buildUserListPipeline(req.query, { skip, limit });
+  const [facet] = await User.aggregate(pipeline);
+  const data = facet?.data ?? [];
+  const total = facet?.totalCount?.[0]?.count ?? 0;
 
   res.status(200).json({
     success: true,
-    count: users.length,
+    count: data.length,
     pagination: {
       total,
       page,
@@ -28,7 +31,7 @@ export const listUsers = catchAsync(async (req: Request, res: Response) => {
       hasNextPage: page * limit < total,
       hasPrevPage: page > 1,
     },
-    data: users,
+    data,
   });
 });
 

@@ -15,6 +15,58 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Users: admin-only list + active/inactive status + cross-collection search
+- **What:** (1) Added `UserStatus` enum (`active` | `inactive`, default `active`,
+  indexed) + `status` field to `models/user.model.ts`; added `status` and
+  `phoneNumber` to `updateUserSchema` so admins can deactivate/edit a user.
+  (2) Gated `GET /api/users` with `authorize(ADMIN)`. (3) Rebuilt the list as an
+  aggregation (`buildUserListPipeline` in `routes/user/helpers.ts`) that
+  `$lookup`s each user's orders + addresses, `$addFields` `orderCount` (`$size`)
+  and distinct `cities`, `$match`es a single `search` term ($or over username/
+  email/phoneNumber/cities, plus exact `orderCount` when the term is an integer),
+  filters by `status`, `$project`s out the password hash + raw joined arrays, and
+  `$facet`s data + total. List query schema gained `search` + `status`.
+- **Why:** User request — only admins may list users; search by name/email/phone/
+  city/order-count, filter by active/inactive, and show name/email/phone/city/
+  join date/orders/status per user.
+- **Tests:** `tests/user.test.ts` — rewrote the list suite for aggregation
+  (defaults + custom page/limit, `limit<20` → 400); order+address `$lookup`s
+  present; search `$or` fields; numeric term adds `orderCount`, non-numeric
+  doesn't; status filter in the pre-join `$match`; invalid status → 400;
+  `password:0` projection; non-admin → 403. Added status-edit + invalid-status
+  cases to PATCH. 164 tests pass.
+- **Notes:** Second cross-collection aggregation list (after admin orders);
+  documented under ARCHITECTURE "Cross-collection search". The `$project
+  { password: 0 }` is mandatory because aggregation bypasses the model's
+  `select:false`.
+
+## 2026-07-04 — Add Address module + order.address + required phoneNumber + admin order join-search
+- **What:** (1) New `Address` model (`street`/`pinCode`/`city` required,
+  `landmark` optional, `user` owner ref; many addresses per user) + owner-scoped
+  CRUD route `routes/address/*` mounted at `/api/addresses` (list own*/create/
+  get/patch/delete; get/patch/delete enforce owner-or-admin). (2) Added required
+  `phoneNumber` to `models/user.model.ts` + `registerSchema` + the register
+  controller + Swagger. (3) Added required `address` ref to
+  `models/order.model.ts`; `createOrder` verifies the address exists and belongs
+  to the caller (else 400); `/my` populates the address. (4) Rebuilt admin
+  `GET /api/orders` as an aggregation (`buildAdminOrderPipeline`) that `$lookup`s
+  user + address so a `search` term matches the order's customer name/phone OR the
+  user's name/email/phone OR any address field. Moved `escapeRegex` +
+  `buildOrderFilter` into `routes/order/helpers.ts`.
+- **Why:** User request — model addresses (many per user), connect an address to
+  each order, collect a phone number at registration, and let admins search
+  orders by person name/email/phone/address and filter by status.
+- **Tests:** New `tests/address.test.ts` (CRUD, pagination, ownership 403, 404,
+  malformed id, validation, malformed JSON). `tests/order.test.ts` — `address`
+  added to validBody + required matrix; malformed/unowned address → 400; admin
+  list rewritten to assert the aggregation pipeline (user/address `$lookup`s,
+  search `$or`, status pre-`$match`, facet skip/limit, regex escaping).
+  `tests/auth.test.ts` — phoneNumber required/invalid + added to the duplicate
+  body. Added address routes to `protected-routes.test.ts` (401).
+- **Notes:** First use of aggregation for cross-collection search — Mongoose
+  `populate` can't filter parent docs by a joined child's fields without breaking
+  pagination totals. Order & address refs are verified for ownership on create.
+
 ## 2026-07-04 — Orders: search/filter + admin edit/delete + status enum
 - **What:** (1) Expanded `OrderStatus` to `pending` (new default) | `confirmed` |
   `out for delivery` | `delivered` | `cancelled`. (2) Replaced generic `itemName`

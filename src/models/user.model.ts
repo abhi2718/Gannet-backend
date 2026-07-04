@@ -6,12 +6,19 @@ export enum UserType {
   CUSTOMER = 'customer',
 }
 
+/** Account status. Admins can deactivate/reactivate a user. */
+export enum UserStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+}
+
 export interface IUser extends Document {
   username: string;
   email: string;
   phoneNumber: string;
   password: string;
   userType: UserType;
+  status: UserStatus;
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -47,6 +54,12 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: Object.values(UserType),
       default: UserType.CUSTOMER,
+    },
+    status: {
+      type: String,
+      enum: Object.values(UserStatus),
+      default: UserStatus.ACTIVE,
+      index: true,
     },
   },
   { timestamps: true }

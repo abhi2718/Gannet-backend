@@ -78,7 +78,9 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 
 - **User** — `username`, `email` (unique), `phoneNumber` (required, collected at
   registration), `password` (hashed, `select:false`), `userType`
-  (`admin` | `customer`). `comparePassword()` method.
+  (`admin` | `customer`), `status` (`active` | `inactive`, default `active` —
+  admins deactivate/reactivate). `comparePassword()` method. The admin user list
+  derives `orderCount` (from Order) and `cities` (from Address) per user.
 - **Address** — `street`, `pinCode`, `city` (all required strings), `landmark`
   (optional), `user` (owner ref). A user may own many addresses; an order
   references one. Owner-scoped CRUD (a customer manages only their own).
@@ -102,7 +104,8 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 
 ## API surface
 
-`/api/auth` (register, login, me) · `/api/users` (list*, get, patch, delete) ·
+`/api/auth` (register, login, me) ·
+`/api/users` (list*[admin, search+status-filter], get, patch, delete) ·
 `/api/products` (list*, create, get, patch, delete) ·
 `/api/queries` (**POST public+rate-limited**, list*+single-term-search+status-filter/edit/delete admin) ·
 `/api/addresses` (list*[own], create, get, patch, delete — owner-scoped) ·
@@ -110,17 +113,27 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 patch-status[admin], delete[admin]; lists searchable+filterable) ·
 `/api/health`. Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
 
-## Cross-collection search (admin order list)
+## Cross-collection search (admin lists)
 
-`GET /api/orders` (admin) must search by fields that live on *other* collections
-(the user's email/phone, the address). Mongoose `populate` cannot filter parent
-documents by a joined child's fields (it only nulls the child), which would break
-pagination totals. So the admin list is built as an **aggregation pipeline**:
-apply the order-level `status`/date `$match`, `$lookup` + `$unwind` the `user`
-and `address`, `$match` the search `$or` across order/user/address fields, then
-`$facet` the page of `data` and the `totalCount` together so `find`/`count` stay
-consistent. The pipeline builder lives in `routes/order/helpers.ts`
-(`buildAdminOrderPipeline`); user input is regex-escaped (CONVENTIONS §10a).
+Two admin lists must search/display by fields that live on *other* collections,
+so both are built as **aggregation pipelines** rather than `find` + `populate`
+(Mongoose `populate` cannot filter parent documents by a joined child's fields —
+it only nulls the child — which would break pagination totals):
+
+- **`GET /api/orders` (admin)** — `$lookup` + `$unwind` the `user` and `address`,
+  then `$match` a search `$or` across the order's customer name/phone, the user's
+  name/email/phone, and the address fields. Builder: `buildAdminOrderPipeline`
+  in `routes/order/helpers.ts`.
+- **`GET /api/users` (admin)** — `$lookup` the user's `orders` and `addresses`,
+  `$addFields` `orderCount` (`$size`) and distinct `cities`, then `$match` a
+  search `$or` across name/email/phone/city (and the exact `orderCount` when the
+  term is an integer). A `$project` drops the `password` hash and the raw joined
+  arrays (aggregation bypasses the model's `select:false`). Builder:
+  `buildUserListPipeline` in `routes/user/helpers.ts`.
+
+Both apply their non-joined filters (`status`, date) in an initial `$match`,
+regex-escape user input (CONVENTIONS §10a), and end with a `$facet` returning the
+page of `data` plus `totalCount` so `find`/`count` totals stay consistent.
 
 ## Owner-scoped access
 

@@ -1,21 +1,37 @@
 import request from 'supertest';
 
-// Bypass JWT/DB auth: the middleware just injects an admin user.
+// Mutable auth state so tests can act as an admin or a plain customer.
+const mockAuthState: { user: { id: string; userType: string } } = {
+  user: { id: '507f1f77bcf86cd799439011', userType: 'admin' },
+};
+
 jest.mock('../src/middlewares/auth', () => ({
   authenticate: (req: { user?: unknown }, _res: unknown, next: () => void) => {
-    req.user = { id: '507f1f77bcf86cd799439011', userType: 'admin' };
+    req.user = mockAuthState.user;
     next();
   },
-  authorize: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  authorize:
+    (...types: string[]) =>
+    (
+      req: { user?: { userType?: string } },
+      res: { status: (c: number) => { json: (b: unknown) => void } },
+      next: () => void
+    ) => {
+      if (!req.user || !types.includes(req.user.userType ?? '')) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+      next();
+    },
 }));
 
-// Replace the Mongoose model with jest mocks, keeping the real UserType enum.
+// Replace the Mongoose model with jest mocks, keeping the real enums.
 jest.mock('../src/models/user.model', () => {
   const actual = jest.requireActual('../src/models/user.model');
   return {
     __esModule: true,
     ...actual,
     User: {
+      aggregate: jest.fn(),
       find: jest.fn(),
       countDocuments: jest.fn(),
       findById: jest.fn(),
@@ -27,17 +43,34 @@ jest.mock('../src/models/user.model', () => {
 
 import { createApp } from '../src/app';
 import { User } from '../src/models/user.model';
-import { makeQuery } from './helpers/mockQuery';
 
 const app = createApp();
 const mockUser = { id: 'u1', username: 'jane', email: 'jane@example.com' };
 const VALID_ID = '507f1f77bcf86cd799439011';
 
-describe('GET /api/users (pagination)', () => {
+beforeEach(() => {
+  mockAuthState.user = { id: VALID_ID, userType: 'admin' };
+});
+
+describe('GET /api/users (admin list, aggregation)', () => {
+  type Stage = Record<string, any>;
+  const lastPipeline = (): Stage[] =>
+    (User.aggregate as jest.Mock).mock.calls[0][0];
+  const facetOf = (pipeline: Stage[]): Stage =>
+    pipeline.find((s) => s.$facet)?.$facet;
+  const searchOrOf = (pipeline: Stage[]): Stage[] | undefined =>
+    pipeline.find((s) => s.$match && s.$match.$or)?.$match.$or;
+
+  beforeEach(() => {
+    (User.aggregate as jest.Mock).mockResolvedValue([
+      { data: [], totalCount: [] },
+    ]);
+  });
+
   it('returns page 1 with a default page size of 20', async () => {
-    const query = makeQuery([mockUser, mockUser]);
-    (User.find as jest.Mock).mockReturnValue(query);
-    (User.countDocuments as jest.Mock).mockResolvedValue(42);
+    (User.aggregate as jest.Mock).mockResolvedValue([
+      { data: [mockUser, mockUser], totalCount: [{ count: 42 }] },
+    ]);
 
     const res = await request(app).get('/api/users');
 
@@ -50,20 +83,18 @@ describe('GET /api/users (pagination)', () => {
       hasNextPage: true,
       hasPrevPage: false,
     });
-    expect(query.skip).toHaveBeenCalledWith(0);
-    expect(query.limit).toHaveBeenCalledWith(20);
+    const facet = facetOf(lastPipeline());
+    expect(facet.data).toContainEqual({ $skip: 0 });
+    expect(facet.data).toContainEqual({ $limit: 20 });
   });
 
   it('honours page and limit query params', async () => {
-    const query = makeQuery([mockUser]);
-    (User.find as jest.Mock).mockReturnValue(query);
-    (User.countDocuments as jest.Mock).mockResolvedValue(100);
-
     const res = await request(app).get('/api/users?page=2&limit=25');
 
     expect(res.status).toBe(200);
-    expect(query.skip).toHaveBeenCalledWith(25);
-    expect(query.limit).toHaveBeenCalledWith(25);
+    const facet = facetOf(lastPipeline());
+    expect(facet.data).toContainEqual({ $skip: 25 });
+    expect(facet.data).toContainEqual({ $limit: 25 });
     expect(res.body.pagination.page).toBe(2);
   });
 
@@ -72,7 +103,60 @@ describe('GET /api/users (pagination)', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/limit/i);
-    expect(User.find).not.toHaveBeenCalled();
+    expect(User.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('joins the order and address collections', async () => {
+    await request(app).get('/api/users');
+    const froms = lastPipeline()
+      .filter((s) => s.$lookup)
+      .map((s) => s.$lookup.from);
+    expect(froms).toEqual(expect.arrayContaining(['orders', 'addresses']));
+  });
+
+  it('searches across name/email/phone/city', async () => {
+    await request(app).get('/api/users?search=jane');
+    const or = searchOrOf(lastPipeline()) ?? [];
+    const fields = or.map((c) => Object.keys(c)[0]);
+    expect(fields).toEqual(
+      expect.arrayContaining(['username', 'email', 'phoneNumber', 'cities'])
+    );
+  });
+
+  it('also matches an exact order count when the term is numeric', async () => {
+    await request(app).get('/api/users?search=5');
+    const or = searchOrOf(lastPipeline()) ?? [];
+    expect(or).toContainEqual({ orderCount: 5 });
+  });
+
+  it('does not add an order-count clause for a non-numeric term', async () => {
+    await request(app).get('/api/users?search=jane');
+    const or = searchOrOf(lastPipeline()) ?? [];
+    expect(or.some((c) => 'orderCount' in c)).toBe(false);
+  });
+
+  it('filters by status before the joins', async () => {
+    await request(app).get('/api/users?status=inactive');
+    expect(lastPipeline()[0].$match.status).toBe('inactive');
+  });
+
+  it('rejects an invalid status value', async () => {
+    const res = await request(app).get('/api/users?status=banned');
+    expect(res.status).toBe(400);
+    expect(User.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('never leaks the password hash (projected out)', async () => {
+    await request(app).get('/api/users');
+    const project = lastPipeline().find((s) => s.$project)?.$project;
+    expect(project.password).toBe(0);
+  });
+
+  it('forbids a non-admin from listing users', async () => {
+    mockAuthState.user = { id: 'u2', userType: 'customer' };
+    const res = await request(app).get('/api/users');
+    expect(res.status).toBe(403);
+    expect(User.aggregate).not.toHaveBeenCalled();
   });
 });
 
@@ -114,6 +198,27 @@ describe('PATCH /api/users/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.username).toBe('janet');
+  });
+
+  it('lets an admin deactivate a user via status', async () => {
+    (User.findByIdAndUpdate as jest.Mock).mockResolvedValue({
+      ...mockUser,
+      status: 'inactive',
+    });
+
+    const res = await request(app)
+      .patch(`/api/users/${VALID_ID}`)
+      .send({ status: 'inactive' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('inactive');
+  });
+
+  it('rejects an invalid status on update', async () => {
+    const res = await request(app)
+      .patch(`/api/users/${VALID_ID}`)
+      .send({ status: 'banned' });
+    expect(res.status).toBe(400);
   });
 
   it('returns 400 for an empty update body', async () => {

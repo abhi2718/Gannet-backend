@@ -19,7 +19,10 @@ router.use(authenticate);
  * /api/users:
  *   get:
  *     tags: [Users]
- *     summary: List users (paginated, page size >= 20)
+ *     summary: List users (admin only; paginated, searchable, filterable)
+ *     description: >-
+ *       Returns each user's name, email, phone, cities (from their addresses),
+ *       join date (createdAt), order count and status.
  *     parameters:
  *       - in: query
  *         name: page
@@ -27,10 +30,25 @@ router.use(authenticate);
  *       - in: query
  *         name: limit
  *         schema: { type: integer, minimum: 20, maximum: 100, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: >-
+ *           Term matched against name OR email OR phone OR any city; an integer
+ *           term also matches the exact order count
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [active, inactive] }
  *     responses:
  *       200: { description: Paginated list of users }
+ *       403: { description: Forbidden (not an admin) }
  */
-router.get('/', validate(listUsersQuerySchema, 'query'), listUsers);
+router.get(
+  '/',
+  authorize(UserType.ADMIN),
+  validate(listUsersQuerySchema, 'query'),
+  listUsers
+);
 
 /**
  * @openapi
