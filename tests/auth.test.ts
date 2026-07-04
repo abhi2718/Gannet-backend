@@ -43,10 +43,33 @@ describe('POST /api/auth/register', () => {
   it('rejects registration missing a required field (email)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ username: 'jane', password: 'secret123' });
+      .send({ username: 'jane', phoneNumber: '+12025550123', password: 'secret123' });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/email/i);
+  });
+
+  it('rejects registration missing the phone number', async () => {
+    const res = await request(app).post('/api/auth/register').send({
+      username: 'jane',
+      email: 'jane@example.com',
+      password: 'secret123',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/phoneNumber/i);
+  });
+
+  it('rejects registration with an invalid phone number', async () => {
+    const res = await request(app).post('/api/auth/register').send({
+      username: 'jane',
+      email: 'jane@example.com',
+      phoneNumber: 'not-a-phone',
+      password: 'secret123',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/phoneNumber/i);
   });
 
   it('rejects registration when the email already exists', async () => {
@@ -57,6 +80,7 @@ describe('POST /api/auth/register', () => {
     const res = await request(app).post('/api/auth/register').send({
       username: 'jane',
       email: 'taken@example.com',
+      phoneNumber: '+12025550123',
       password: 'secret123',
     });
 

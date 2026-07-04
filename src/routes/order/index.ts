@@ -40,7 +40,9 @@ router.use(authenticate);
  *       - in: query
  *         name: search
  *         schema: { type: string }
- *         description: Term matched against customer name OR phone OR bottle size
+ *         description: >-
+ *           Term matched against the order's customer name/phone OR the user's
+ *           name/email/phone OR any part of the delivery address
  *       - in: query
  *         name: status
  *         schema:
@@ -64,13 +66,14 @@ router.use(authenticate);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [customerName, customerPhone, bottleSize, quantity, amount]
+ *             required: [customerName, customerPhone, bottleSize, quantity, amount, address]
  *             properties:
  *               customerName: { type: string }
  *               customerPhone: { type: string }
  *               bottleSize: { type: string }
  *               quantity: { type: integer, minimum: 1 }
  *               amount: { type: number, minimum: 0 }
+ *               address: { type: string, description: Id of one of the caller's addresses }
  *               estimatedDelivery: { type: string, format: date-time }
  *     responses:
  *       201: { description: Order created }
@@ -153,6 +156,7 @@ router.get('/my', validate(listOrdersQuerySchema, 'query'), listMyOrders);
  *               bottleSize: { type: string }
  *               quantity: { type: integer, minimum: 1 }
  *               amount: { type: number, minimum: 0 }
+ *               address: { type: string }
  *               estimatedDelivery: { type: string, format: date-time }
  *               status:
  *                 type: string

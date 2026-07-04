@@ -20,10 +20,11 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [username, email, password]
+ *             required: [username, email, phoneNumber, password]
  *             properties:
  *               username: { type: string }
  *               email: { type: string, format: email }
+ *               phoneNumber: { type: string }
  *               password: { type: string, format: password }
  *               userType: { type: string, enum: [admin, customer] }
  *     responses:

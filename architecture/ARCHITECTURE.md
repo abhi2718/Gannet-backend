@@ -76,8 +76,12 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 
 ## Data models
 
-- **User** — `username`, `email` (unique), `password` (hashed, `select:false`),
-  `userType` (`admin` | `customer`). `comparePassword()` method.
+- **User** — `username`, `email` (unique), `phoneNumber` (required, collected at
+  registration), `password` (hashed, `select:false`), `userType`
+  (`admin` | `customer`). `comparePassword()` method.
+- **Address** — `street`, `pinCode`, `city` (all required strings), `landmark`
+  (optional), `user` (owner ref). A user may own many addresses; an order
+  references one. Owner-scoped CRUD (a customer manages only their own).
 - **Product** — `productName`, `url`, `price`, `description`, `createdBy` (User ref).
 - **Query** — `fullName`, `mobileNumber`, `email`, `city`, `requirement`,
   `message` (all required strings; `message` up to 2000 chars), `status`
@@ -87,18 +91,36 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 - **Order** — `orderId` (auto, unique), `customerName`, `customerPhone`,
   `bottleSize`, `quantity`, `amount`, `estimatedDelivery` (Date, default +7d),
   `status` (enum: `pending` → `confirmed` → `out for delivery` → `delivered`, or
-  `cancelled`; default `pending`), `user` (owner ref). Customers see only their
-  own orders; admins see all, and can edit/delete any order. Lists are
-  searchable (name/phone/bottleSize) and filterable (status, date range).
+  `cancelled`; default `pending`), `user` (owner ref), `address` (Address ref;
+  verified to belong to the caller on create). Customers see only their own
+  orders; admins see all, and can edit/delete any order. `GET /api/orders/my`
+  filters by name/phone/bottleSize (status, date range). The admin
+  `GET /api/orders` uses an **aggregation pipeline** that `$lookup`s the user and
+  address so a single `search` term matches the order's customer name/phone OR
+  the user's name/email/phone OR any part of the address (see "Cross-collection
+  search" below).
 
 ## API surface
 
 `/api/auth` (register, login, me) · `/api/users` (list*, get, patch, delete) ·
 `/api/products` (list*, create, get, patch, delete) ·
 `/api/queries` (**POST public+rate-limited**, list*+single-term-search+status-filter/edit/delete admin) ·
+`/api/addresses` (list*[own], create, get, patch, delete — owner-scoped) ·
 `/api/orders` (my-list*, all-list*[admin], create, get, edit[admin],
 patch-status[admin], delete[admin]; lists searchable+filterable) ·
 `/api/health`. Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
+
+## Cross-collection search (admin order list)
+
+`GET /api/orders` (admin) must search by fields that live on *other* collections
+(the user's email/phone, the address). Mongoose `populate` cannot filter parent
+documents by a joined child's fields (it only nulls the child), which would break
+pagination totals. So the admin list is built as an **aggregation pipeline**:
+apply the order-level `status`/date `$match`, `$lookup` + `$unwind` the `user`
+and `address`, `$match` the search `$or` across order/user/address fields, then
+`$facet` the page of `data` and the `totalCount` together so `find`/`count` stay
+consistent. The pipeline builder lives in `routes/order/helpers.ts`
+(`buildAdminOrderPipeline`); user input is regex-escaped (CONVENTIONS §10a).
 
 ## Owner-scoped access
 

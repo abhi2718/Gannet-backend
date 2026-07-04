@@ -1,93 +1,86 @@
 import { Request, Response } from 'express';
+import { Address } from '../../models/address.model';
 import { Order } from '../../models/order.model';
 import { IUser, UserType } from '../../models/user.model';
 import { ApiError } from '../../utils/ApiError';
 import { catchAsync } from '../../utils/catchAsync';
+import { buildAdminOrderPipeline, buildOrderFilter } from './helpers';
 
-// Escape user input before using it in a regex to avoid regex injection/ReDoS.
-const escapeRegex = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * Build the search/filter portion of an order query: a single `search` term
- * matched (case-insensitively) against customerName OR customerPhone OR
- * bottleSize, an exact `status`, and a `dateFrom`/`dateTo` range on createdAt.
- */
-const buildOrderFilter = (q: Request['query']): Record<string, unknown> => {
-  const filter: Record<string, unknown> = {};
-
-  if (q.search) {
-    const rx = { $regex: escapeRegex(String(q.search)), $options: 'i' };
-    filter.$or = [
-      { customerName: rx },
-      { customerPhone: rx },
-      { bottleSize: rx },
-    ];
-  }
-  if (q.status) filter.status = q.status;
-
-  if (q.dateFrom || q.dateTo) {
-    const createdAt: Record<string, Date> = {};
-    if (q.dateFrom) createdAt.$gte = new Date(String(q.dateFrom));
-    if (q.dateTo) createdAt.$lte = new Date(String(q.dateTo));
-    filter.createdAt = createdAt;
-  }
-  return filter;
-};
+const buildPagination = (total: number, page: number, limit: number) => ({
+  total,
+  page,
+  limit,
+  totalPages: Math.ceil(total / limit),
+  hasNextPage: page * limit < total,
+  hasPrevPage: page > 1,
+});
 
 /**
- * POST /api/orders — create an order owned by the current user.
+ * POST /api/orders — create an order owned by the current user. The referenced
+ * address must exist and belong to the caller.
  */
 export const createOrder = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as IUser;
+  const address = await Address.findOne({
+    _id: req.body.address,
+    user: user.id,
+  });
+  if (!address) {
+    throw ApiError.badRequest('address not found or does not belong to you');
+  }
   const order = await Order.create({ ...req.body, user: user.id });
   res.status(201).json({ success: true, data: order });
 });
 
-// Shared paginated responder; `base` scopes ownership, merged with search/filter.
-const respondWithPaginatedOrders = async (
-  base: Record<string, unknown>,
-  req: Request,
-  res: Response
-): Promise<void> => {
+/**
+ * GET /api/orders/my — the current user's own orders (searchable, paginated).
+ * The delivery address is populated so the caller sees where it ships.
+ */
+export const listMyOrders = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user as IUser;
   const page = Number(req.query.page);
   const limit = Number(req.query.limit);
   const skip = (page - 1) * limit;
-  const filter = { ...base, ...buildOrderFilter(req.query) };
+  const filter = { user: user.id, ...buildOrderFilter(req.query) };
 
   const [orders, total] = await Promise.all([
-    Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Order.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('address'),
     Order.countDocuments(filter),
   ]);
 
   res.status(200).json({
     success: true,
     count: orders.length,
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-      hasNextPage: page * limit < total,
-      hasPrevPage: page > 1,
-    },
+    pagination: buildPagination(total, page, limit),
     data: orders,
   });
-};
-
-/**
- * GET /api/orders/my — the current user's own orders (searchable, paginated).
- */
-export const listMyOrders = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user as IUser;
-  await respondWithPaginatedOrders({ user: user.id }, req, res);
 });
 
 /**
- * GET /api/orders — every order (admin only; searchable, paginated).
+ * GET /api/orders — every order (admin only). Joins the user and address so the
+ * admin sees who placed each order (name/phone/email) and where, and can search
+ * across all of those fields plus filter by status and date. Paginated.
  */
 export const listAllOrders = catchAsync(async (req: Request, res: Response) => {
-  await respondWithPaginatedOrders({}, req, res);
+  const page = Number(req.query.page);
+  const limit = Number(req.query.limit);
+  const skip = (page - 1) * limit;
+
+  const pipeline = buildAdminOrderPipeline(req.query, { skip, limit });
+  const [facet] = await Order.aggregate(pipeline);
+  const data = facet?.data ?? [];
+  const total = facet?.totalCount?.[0]?.count ?? 0;
+
+  res.status(200).json({
+    success: true,
+    count: data.length,
+    pagination: buildPagination(total, page, limit),
+    data,
+  });
 });
 
 /**

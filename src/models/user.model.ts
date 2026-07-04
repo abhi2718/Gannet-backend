@@ -9,6 +9,7 @@ export enum UserType {
 export interface IUser extends Document {
   username: string;
   email: string;
+  phoneNumber: string;
   password: string;
   userType: UserType;
   comparePassword(candidate: string): Promise<boolean>;
@@ -29,6 +30,12 @@ const userSchema = new Schema<IUser>(
       unique: true,
       lowercase: true,
       trim: true,
+    },
+    phoneNumber: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
     },
     password: {
       type: String,

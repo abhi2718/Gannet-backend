@@ -8,14 +8,20 @@ import { signToken } from '../../utils/jwt';
  * POST /api/auth/register — create an account and return a JWT.
  */
 export const register = catchAsync(async (req: Request, res: Response) => {
-  const { username, email, password, userType } = req.body;
+  const { username, email, phoneNumber, password, userType } = req.body;
 
   const existing = await User.findOne({ email });
   if (existing) {
     throw ApiError.conflict('Email is already registered');
   }
 
-  const user = await User.create({ username, email, password, userType });
+  const user = await User.create({
+    username,
+    email,
+    phoneNumber,
+    password,
+    userType,
+  });
   const token = signToken(user.id);
 
   res.status(201).json({ success: true, data: { user, token } });

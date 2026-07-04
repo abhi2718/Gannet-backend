@@ -34,6 +34,7 @@ jest.mock('../src/models/order.model', () => {
     Order: {
       create: jest.fn(),
       find: jest.fn(),
+      aggregate: jest.fn(),
       countDocuments: jest.fn(),
       findById: jest.fn(),
       findByIdAndUpdate: jest.fn(),
@@ -42,22 +43,35 @@ jest.mock('../src/models/order.model', () => {
   };
 });
 
+jest.mock('../src/models/address.model', () => ({
+  __esModule: true,
+  Address: { findOne: jest.fn() },
+}));
+
 import { createApp } from '../src/app';
+import { Address } from '../src/models/address.model';
 import { Order, OrderStatus } from '../src/models/order.model';
 import { makeQuery } from './helpers/mockQuery';
 
 const app = createApp();
 const VALID_ID = '507f1f77bcf86cd799439011';
+const ADDRESS_ID = '507f1f77bcf86cd799439099';
 const validBody = {
   customerName: 'John Doe',
   customerPhone: '+12025550123',
   bottleSize: '20L',
   quantity: 2,
   amount: 49.99,
+  address: ADDRESS_ID,
 };
 
 beforeEach(() => {
   mockAuthState.user = { id: 'user1', userType: 'customer' };
+  // By default the referenced address exists and belongs to the caller.
+  (Address.findOne as jest.Mock).mockResolvedValue({
+    id: 'addr1',
+    user: 'user1',
+  });
 });
 
 describe('POST /api/orders', () => {
@@ -71,21 +85,46 @@ describe('POST /api/orders', () => {
     const res = await request(app).post('/api/orders').send(validBody);
 
     expect(res.status).toBe(201);
+    // The referenced address is verified to belong to the caller.
+    expect(Address.findOne).toHaveBeenCalledWith({
+      _id: ADDRESS_ID,
+      user: 'user1',
+    });
     expect(Order.create).toHaveBeenCalledWith(
       expect.objectContaining({ ...validBody, user: 'user1' })
     );
   });
 
-  it.each(['customerName', 'customerPhone', 'bottleSize', 'quantity', 'amount'])(
-    'rejects when required field "%s" is missing',
-    async (field) => {
-      const body: Record<string, unknown> = { ...validBody };
-      delete body[field];
-      const res = await request(app).post('/api/orders').send(body);
-      expect(res.status).toBe(400);
-      expect(res.body.message).toContain(field);
-    }
-  );
+  it.each([
+    'customerName',
+    'customerPhone',
+    'bottleSize',
+    'quantity',
+    'amount',
+    'address',
+  ])('rejects when required field "%s" is missing', async (field) => {
+    const body: Record<string, unknown> = { ...validBody };
+    delete body[field];
+    const res = await request(app).post('/api/orders').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain(field);
+  });
+
+  it('rejects a malformed address id', async () => {
+    const res = await request(app)
+      .post('/api/orders')
+      .send({ ...validBody, address: 'not-an-id' });
+    expect(res.status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an address that does not belong to the caller', async () => {
+    (Address.findOne as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).post('/api/orders').send(validBody);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/address/i);
+    expect(Order.create).not.toHaveBeenCalled();
+  });
 
   it('rejects a quantity below 1', async () => {
     const res = await request(app)
@@ -169,45 +208,98 @@ describe('GET /api/orders/my (own orders, paginated)', () => {
   });
 });
 
-describe('GET /api/orders (all orders, admin only)', () => {
-  it('lets an admin list every order, paginated', async () => {
+describe('GET /api/orders (all orders, admin only, aggregation search)', () => {
+  type Stage = Record<string, any>;
+  const lastPipeline = (): Stage[] =>
+    (Order.aggregate as jest.Mock).mock.calls[0][0];
+  const facetOf = (pipeline: Stage[]): Stage =>
+    pipeline.find((s) => s.$facet)?.$facet;
+  const searchOrOf = (pipeline: Stage[]): Stage[] | undefined =>
+    pipeline.find((s) => s.$match && s.$match.$or)?.$match.$or;
+
+  beforeEach(() => {
     mockAuthState.user = { id: 'admin1', userType: 'admin' };
-    const query = makeQuery([{ id: 'o1' }, { id: 'o2' }]);
-    (Order.find as jest.Mock).mockReturnValue(query);
-    (Order.countDocuments as jest.Mock).mockResolvedValue(2);
+    (Order.aggregate as jest.Mock).mockResolvedValue([
+      { data: [], totalCount: [] },
+    ]);
+  });
+
+  it('lets an admin list every order, paginated', async () => {
+    (Order.aggregate as jest.Mock).mockResolvedValue([
+      { data: [{ _id: 'o1' }, { _id: 'o2' }], totalCount: [{ count: 2 }] },
+    ]);
 
     const res = await request(app).get('/api/orders?page=2&limit=25');
 
     expect(res.status).toBe(200);
-    expect(Order.find).toHaveBeenCalledWith({});
-    expect(query.skip).toHaveBeenCalledWith(25);
-    expect(query.limit).toHaveBeenCalledWith(25);
+    expect(Order.aggregate).toHaveBeenCalled();
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.pagination).toMatchObject({ total: 2, page: 2, limit: 25 });
+
+    const facet = facetOf(lastPipeline());
+    expect(facet.data).toContainEqual({ $skip: 25 });
+    expect(facet.data).toContainEqual({ $limit: 25 });
   });
 
-  it('lets an admin search across all orders', async () => {
-    mockAuthState.user = { id: 'admin1', userType: 'admin' };
-    const query = makeQuery([]);
-    (Order.find as jest.Mock).mockReturnValue(query);
-    (Order.countDocuments as jest.Mock).mockResolvedValue(0);
+  it('joins the user and address collections', async () => {
+    await request(app).get('/api/orders');
 
+    const lookups = lastPipeline()
+      .filter((s) => s.$lookup)
+      .map((s) => s.$lookup.from);
+    expect(lookups).toEqual(expect.arrayContaining(['users', 'addresses']));
+  });
+
+  it('searches across order, user and address fields', async () => {
     await request(app).get('/api/orders?search=9876543210');
 
-    const arg = (Order.find as jest.Mock).mock.calls[0][0];
-    expect(arg.user).toBeUndefined();
-    expect(arg.$or[1].customerPhone.$regex).toBe('9876543210');
+    const or = searchOrOf(lastPipeline()) ?? [];
+    const fields = or.map((c) => Object.keys(c)[0]);
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        'customerName',
+        'customerPhone',
+        'user.username',
+        'user.email',
+        'user.phoneNumber',
+        'address.street',
+        'address.city',
+        'address.pinCode',
+        'address.landmark',
+      ])
+    );
+    expect(or[1].customerPhone.$regex).toBe('9876543210');
+  });
+
+  it('escapes regex metacharacters in the admin search term', async () => {
+    await request(app).get('/api/orders?search=a.%2Ab'); // "a.*b"
+
+    const or = searchOrOf(lastPipeline()) ?? [];
+    expect(or[0].customerName.$regex).toBe('a\\.\\*b');
+  });
+
+  it('applies the status filter before the joins', async () => {
+    await request(app).get('/api/orders?status=delivered');
+    expect(lastPipeline()[0].$match.status).toBe('delivered');
   });
 
   it('forbids a customer from listing all orders', async () => {
+    mockAuthState.user = { id: 'user1', userType: 'customer' };
     const res = await request(app).get('/api/orders');
     expect(res.status).toBe(403);
-    expect(Order.find).not.toHaveBeenCalled();
+    expect(Order.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid status filter value (admin)', async () => {
+    const res = await request(app).get('/api/orders?status=shipped');
+    expect(res.status).toBe(400);
+    expect(Order.aggregate).not.toHaveBeenCalled();
   });
 
   it('rejects a page size below the minimum of 20 (admin)', async () => {
-    mockAuthState.user = { id: 'admin1', userType: 'admin' };
     const res = await request(app).get('/api/orders?limit=5');
     expect(res.status).toBe(400);
-    expect(Order.find).not.toHaveBeenCalled();
+    expect(Order.aggregate).not.toHaveBeenCalled();
   });
 });
 

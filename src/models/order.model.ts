@@ -21,6 +21,7 @@ export interface IOrder extends Document {
   estimatedDelivery: Date;
   status: OrderStatus;
   user: Types.ObjectId;
+  address: Types.ObjectId;
 }
 
 // Human-readable, unique business id (distinct from the Mongo _id).
@@ -84,6 +85,12 @@ const orderSchema = new Schema<IOrder>(
     user: {
       type: Schema.Types.ObjectId,
       ref: 'User',
+      required: true,
+      index: true,
+    },
+    address: {
+      type: Schema.Types.ObjectId,
+      ref: 'Address',
       required: true,
       index: true,
     },
