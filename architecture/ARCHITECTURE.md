@@ -81,9 +81,10 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
   (`admin` | `customer`), `status` (`active` | `inactive`, default `active` —
   admins deactivate/reactivate). `comparePassword()` method. The admin user list
   derives `orderCount` (from Order) and `cities` (from Address) per user.
-- **Address** — `street`, `pinCode`, `city` (all required strings), `landmark`
-  (optional), `user` (owner ref). A user may own many addresses; an order
-  references one. Owner-scoped CRUD (a customer manages only their own).
+- **Address** — `label` (required; e.g. home/office/student), `street`,
+  `pinCode`, `city`, `state` (all required strings), `landmark` (optional),
+  `user` (owner ref). A user may own many addresses; an order references one.
+  Owner-scoped CRUD (a customer manages, and edits, only their own).
 - **Product** — `productName`, `url`, `price`, `description`, `createdBy` (User ref).
 - **Query** — `fullName`, `mobileNumber`, `email`, `city`, `requirement`,
   `message` (all required strings; `message` up to 2000 chars), `status`
@@ -111,8 +112,8 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 `/api/addresses` (list*[own], create, get, patch, delete — owner-scoped) ·
 `/api/orders` (my-list*, all-list*[admin], create, get, edit[admin],
 patch-status[admin], delete[admin]; lists searchable+filterable) ·
-`/api/analytics` (**admin only**: order-status counts, platform summary,
-monthly bookings/queries trends — for dashboards & charts) ·
+`/api/analytics` (my-orders[any user]; **admin only**: order-status counts,
+platform summary, monthly bookings/queries trends — for dashboards & charts) ·
 `/api/health`. Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
 
 ## Cross-collection search (admin lists)
@@ -139,12 +140,19 @@ page of `data` plus `totalCount` so `find`/`count` totals stay consistent.
 
 ## Analytics (admin dashboards & charts)
 
-`src/routes/analytics/` exposes three **admin-only** read endpoints
-(`authenticate → authorize(ADMIN)` on the whole router) for dashboards; none are
-paginated (they return small fixed shapes):
+`src/routes/analytics/` exposes read endpoints for dashboards. The router applies
+`authenticate` to all; the admin dashboards additionally apply
+`authorize(ADMIN)` **per route** (so the one user-scoped endpoint stays open to
+any authenticated user). None are paginated (they return small fixed shapes):
 
-- **`GET /api/analytics/order-status`** — `$group` orders by `status` → a map of
-  every `OrderStatus` to its count (absent statuses reported as 0).
+- **`GET /api/analytics/my-orders`** (any authenticated user) — the caller's own
+  order analytics in one aggregation pass: `totalOrders`, `deliveredOrders`,
+  `pendingOrders`, `outForDeliveryOrders`, and `totalSpent` = Σ(`quantity` ×
+  `amount`) over their orders. Scoped by `$match { user: ObjectId(id) }` — note
+  aggregation does **not** auto-cast the id, so the controller wraps it in
+  `new Types.ObjectId(...)` (unlike `find`).
+- **`GET /api/analytics/order-status`** (admin) — `$group` orders by `status` → a
+  map of every `OrderStatus` to its count (absent statuses reported as 0).
 - **`GET /api/analytics/summary`** — `totalOrders`, `pendingOrders`,
   `deliveredOrders` (completed) and `totalUsers` via parallel `countDocuments`.
 - **`GET /api/analytics/monthly-trends`** — a **dense** month series for charting:

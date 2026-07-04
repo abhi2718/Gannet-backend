@@ -41,9 +41,11 @@ import { makeQuery } from './helpers/mockQuery';
 const app = createApp();
 const VALID_ID = '507f1f77bcf86cd799439011';
 const validBody = {
+  label: 'home',
   street: '221B Baker Street',
   pinCode: '110011',
   city: 'London',
+  state: 'Greater London',
 };
 
 // A stored address document owned by `user1` with save/delete spies.
@@ -83,7 +85,7 @@ describe('POST /api/addresses', () => {
     );
   });
 
-  it.each(['street', 'pinCode', 'city'])(
+  it.each(['label', 'street', 'pinCode', 'city', 'state'])(
     'rejects when required field "%s" is missing',
     async (field) => {
       const body: Record<string, unknown> = { ...validBody };
@@ -199,6 +201,18 @@ describe('PATCH /api/addresses/:id', () => {
     expect(res.status).toBe(200);
     expect(doc.save).toHaveBeenCalled();
     expect(res.body.data.city).toBe('Paris');
+  });
+
+  it('lets the owner change the label', async () => {
+    const doc = ownedDoc();
+    (Address.findById as jest.Mock).mockResolvedValue(doc);
+
+    const res = await request(app)
+      .patch(`/api/addresses/${VALID_ID}`)
+      .send({ label: 'office' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.label).toBe('office');
   });
 
   it('rejects an empty update body', async () => {

@@ -54,6 +54,65 @@ beforeEach(() => {
   mockAuthState.user = { id: 'admin1', userType: 'admin' };
 });
 
+describe('GET /api/analytics/my-orders', () => {
+  const USER_ID = '507f1f77bcf86cd799439011';
+
+  beforeEach(() => {
+    mockAuthState.user = { id: USER_ID, userType: 'customer' };
+  });
+
+  it("returns the caller's own order stats and total spent", async () => {
+    (Order.aggregate as jest.Mock).mockResolvedValue([
+      {
+        _id: null,
+        totalOrders: 5,
+        deliveredOrders: 2,
+        pendingOrders: 1,
+        outForDeliveryOrders: 1,
+        totalSpent: 250,
+      },
+    ]);
+
+    const res = await request(app).get('/api/analytics/my-orders');
+
+    expect(res.status).toBe(200); // a customer (non-admin) can access this
+    expect(res.body.data).toEqual({
+      totalOrders: 5,
+      deliveredOrders: 2,
+      pendingOrders: 1,
+      outForDeliveryOrders: 1,
+      totalSpent: 250,
+    });
+  });
+
+  it('scopes the aggregation to the caller and sums quantity × amount', async () => {
+    (Order.aggregate as jest.Mock).mockResolvedValue([]);
+
+    await request(app).get('/api/analytics/my-orders');
+
+    const pipeline = (Order.aggregate as jest.Mock).mock.calls[0][0];
+    expect(pipeline[0].$match.user.toString()).toBe(USER_ID);
+    expect(pipeline[1].$group.totalSpent.$sum).toEqual({
+      $multiply: ['$quantity', '$amount'],
+    });
+  });
+
+  it('returns zeros when the user has no orders', async () => {
+    (Order.aggregate as jest.Mock).mockResolvedValue([]);
+
+    const res = await request(app).get('/api/analytics/my-orders');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      totalOrders: 0,
+      deliveredOrders: 0,
+      pendingOrders: 0,
+      outForDeliveryOrders: 0,
+      totalSpent: 0,
+    });
+  });
+});
+
 describe('GET /api/analytics/order-status', () => {
   it('returns the count for every status (missing ones as 0)', async () => {
     (Order.aggregate as jest.Mock).mockResolvedValue([

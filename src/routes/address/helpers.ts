@@ -13,16 +13,20 @@ export const addressIdParamSchema = Joi.object({
 });
 
 export const createAddressSchema = Joi.object({
+  label: Joi.string().trim().min(1).max(50).required(),
   street: Joi.string().trim().min(2).max(200).required(),
   pinCode: Joi.string().trim().min(3).max(20).required(),
   city: Joi.string().trim().min(2).max(100).required(),
+  state: Joi.string().trim().min(2).max(100).required(),
   landmark: Joi.string().trim().max(200).optional(),
 });
 
 export const updateAddressSchema = Joi.object({
+  label: Joi.string().trim().min(1).max(50).optional(),
   street: Joi.string().trim().min(2).max(200).optional(),
   pinCode: Joi.string().trim().min(3).max(20).optional(),
   city: Joi.string().trim().min(2).max(100).optional(),
+  state: Joi.string().trim().min(2).max(100).optional(),
   landmark: Joi.string().trim().max(200).optional(),
 }).min(1);
 

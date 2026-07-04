@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Order, OrderStatus } from '../../models/order.model';
 import { Query } from '../../models/query.model';
-import { User } from '../../models/user.model';
+import { IUser, User } from '../../models/user.model';
 import { catchAsync } from '../../utils/catchAsync';
 import {
   denseCounts,
@@ -9,8 +9,32 @@ import {
   lastMonthFor,
   monthRange,
   monthlyPipeline,
+  myOrderStatsPipeline,
   orderStatusPipeline,
 } from './helpers';
+
+/**
+ * GET /api/analytics/my-orders — the current user's own order analytics: how
+ * many orders they placed, and how many are delivered / pending / out for
+ * delivery, plus total spent = Σ(quantity × amount) across their orders.
+ */
+export const myOrderAnalytics = catchAsync(
+  async (req: Request, res: Response) => {
+    const user = req.user as IUser;
+    const [stats] = await Order.aggregate(myOrderStatsPipeline(user.id));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalOrders: stats?.totalOrders ?? 0,
+        deliveredOrders: stats?.deliveredOrders ?? 0,
+        pendingOrders: stats?.pendingOrders ?? 0,
+        outForDeliveryOrders: stats?.outForDeliveryOrders ?? 0,
+        totalSpent: stats?.totalSpent ?? 0,
+      },
+    });
+  }
+);
 
 /**
  * GET /api/analytics/order-status — admin. Number of orders in each status

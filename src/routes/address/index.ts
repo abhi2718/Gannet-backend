@@ -44,11 +44,13 @@ router.use(authenticate);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [street, pinCode, city]
+ *             required: [label, street, pinCode, city, state]
  *             properties:
+ *               label: { type: string, description: e.g. home, office, student }
  *               street: { type: string }
  *               pinCode: { type: string }
  *               city: { type: string }
+ *               state: { type: string }
  *               landmark: { type: string }
  *     responses:
  *       201: { description: Address created }
@@ -88,9 +90,11 @@ router
  *           schema:
  *             type: object
  *             properties:
+ *               label: { type: string }
  *               street: { type: string }
  *               pinCode: { type: string }
  *               city: { type: string }
+ *               state: { type: string }
  *               landmark: { type: string }
  *     responses:
  *       200: { description: Updated address }

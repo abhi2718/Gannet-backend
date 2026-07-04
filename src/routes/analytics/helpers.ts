@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { PipelineStage } from 'mongoose';
+import { PipelineStage, Types } from 'mongoose';
 import { OrderStatus } from '../../models/order.model';
 
 // Optional single-year filter for the monthly-trends graph (default: this year).
@@ -19,6 +19,30 @@ export const emptyOrderStatusCounts = (): StatusCounts =>
 // Group orders by status → { _id: <status>, count } rows.
 export const orderStatusPipeline = (): PipelineStage[] => [
   { $group: { _id: '$status', count: { $sum: 1 } } },
+];
+
+// $sum 1 only when the order's status equals `status`.
+const countWhenStatus = (status: OrderStatus) => ({
+  $sum: { $cond: [{ $eq: ['$status', status] }, 1, 0] },
+});
+
+/**
+ * One user's own order stats in a single pass: total, delivered, pending and
+ * out-for-delivery counts, plus total spent = Σ(quantity × amount) across their
+ * orders. `userId` is cast to an ObjectId (aggregation does not auto-cast).
+ */
+export const myOrderStatsPipeline = (userId: string): PipelineStage[] => [
+  { $match: { user: new Types.ObjectId(userId) } },
+  {
+    $group: {
+      _id: null,
+      totalOrders: { $sum: 1 },
+      deliveredOrders: countWhenStatus(OrderStatus.DELIVERED),
+      pendingOrders: countWhenStatus(OrderStatus.PENDING),
+      outForDeliveryOrders: countWhenStatus(OrderStatus.OUT_FOR_DELIVERY),
+      totalSpent: { $sum: { $multiply: ['$quantity', '$amount'] } },
+    },
+  },
 ];
 
 type MonthlyRow = { _id: { year: number; month: number }; count: number };

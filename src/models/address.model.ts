@@ -1,9 +1,11 @@
 import { Document, model, Schema, Types } from 'mongoose';
 
 export interface IAddress extends Document {
+  label: string;
   street: string;
   pinCode: string;
   city: string;
+  state: string;
   landmark?: string;
   user: Types.ObjectId;
 }
@@ -15,6 +17,12 @@ export interface IAddress extends Document {
  */
 const addressSchema = new Schema<IAddress>(
   {
+    label: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
+    },
     street: {
       type: String,
       required: true,
@@ -30,6 +38,13 @@ const addressSchema = new Schema<IAddress>(
       index: true,
     },
     city: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100,
+      index: true,
+    },
+    state: {
       type: String,
       required: true,
       trim: true,

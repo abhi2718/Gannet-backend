@@ -2,13 +2,33 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import { UserType } from '../../models/user.model';
-import { monthlyTrends, orderStatusBreakdown, summary } from './controller';
+import {
+  monthlyTrends,
+  myOrderAnalytics,
+  orderStatusBreakdown,
+  summary,
+} from './controller';
 import { trendsQuerySchema } from './helpers';
 
 const router = Router();
 
-// Every analytics endpoint requires a valid JWT AND admin privileges.
-router.use(authenticate, authorize(UserType.ADMIN));
+// Every analytics endpoint requires a valid JWT; dashboards additionally
+// require admin (applied per-route below).
+router.use(authenticate);
+
+/**
+ * @openapi
+ * /api/analytics/my-orders:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: The current user's own order analytics
+ *     responses:
+ *       200:
+ *         description: >-
+ *           totalOrders, deliveredOrders, pendingOrders, outForDeliveryOrders
+ *           and totalSpent (Σ quantity × amount) for the caller
+ */
+router.get('/my-orders', myOrderAnalytics);
 
 /**
  * @openapi
@@ -23,7 +43,7 @@ router.use(authenticate, authorize(UserType.ADMIN));
  *           out for delivery, delivered, cancelled)
  *       403: { description: Forbidden (not an admin) }
  */
-router.get('/order-status', orderStatusBreakdown);
+router.get('/order-status', authorize(UserType.ADMIN), orderStatusBreakdown);
 
 /**
  * @openapi
@@ -38,7 +58,7 @@ router.get('/order-status', orderStatusBreakdown);
  *           totalUsers
  *       403: { description: Forbidden (not an admin) }
  */
-router.get('/summary', summary);
+router.get('/summary', authorize(UserType.ADMIN), summary);
 
 /**
  * @openapi
@@ -58,6 +78,11 @@ router.get('/summary', summary);
  *           sorted chronologically
  *       403: { description: Forbidden (not an admin) }
  */
-router.get('/monthly-trends', validate(trendsQuerySchema, 'query'), monthlyTrends);
+router.get(
+  '/monthly-trends',
+  authorize(UserType.ADMIN),
+  validate(trendsQuerySchema, 'query'),
+  monthlyTrends
+);
 
 export default router;

@@ -15,6 +15,41 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Address: add required `state` field
+- **What:** Added required `state` to the `Address` model (interface + schema,
+  indexed like `city`), to `createAddressSchema` (required) and
+  `updateAddressSchema` (optional), and to the create/update Swagger in
+  `routes/address/index.ts`. The controller needed no change — it persists
+  `...req.body` on create and `Object.assign`s `req.body` on update.
+- **Why:** User request — addresses must carry a state.
+- **Tests:** `tests/address.test.ts` — `state` added to `validBody` and the
+  required-field matrix. Full suite green (182 tests).
+- **Notes:** Mirrors the existing `city` field (required, trimmed, indexed).
+
+## 2026-07-04 — User order analytics endpoint + required Address `label`
+- **What:** (1) Added required `label` field (e.g. home/office/student) to the
+  `Address` model + `createAddressSchema` (required) / `updateAddressSchema`
+  (optional) + Swagger. (2) New **user-scoped** `GET /api/analytics/my-orders`
+  returning the caller's `totalOrders`, `deliveredOrders`, `pendingOrders`,
+  `outForDeliveryOrders` and `totalSpent` = Σ(quantity × amount) in one
+  aggregation (`myOrderStatsPipeline` in `analytics/helpers.ts`). (3) Restructured
+  the analytics router: `authenticate` for all, `authorize(ADMIN)` **per-route**
+  on the three dashboards so the new my-orders endpoint is open to any
+  authenticated user.
+- **Why:** User request — a customer wants their own order counts (placed /
+  delivered / pending / out-for-delivery) and total spent; and addresses need a
+  label. `totalSpent` uses the user's stated formula quantity × price(amount).
+- **Tests:** `tests/analytics.test.ts` — my-orders happy path (counts +
+  totalSpent, reachable by a non-admin), `$match` scoped to the caller's
+  ObjectId + `totalSpent` uses `$multiply`, empty → all zeros. `tests/
+  address.test.ts` — `label` in validBody + required matrix + owner label edit.
+  Added `/api/analytics/my-orders` to `protected-routes.test.ts` (401). 182 tests
+  pass.
+- **Notes:** Aggregation `$match` on a ref id needs an explicit
+  `new Types.ObjectId(id)` (no auto-cast, unlike `find`). Assumed order `amount`
+  is the unit price per the user's formula — if it is already a line total,
+  `totalSpent` should be Σ(amount) instead (flag to confirm).
+
 ## 2026-07-04 — Analytics: dense month-aligned trend series for charting
 - **What:** Reshaped `GET /api/analytics/monthly-trends` from sparse
   `[{ year, month, count }]` arrays into a **dense, plot-ready** shape: a shared
