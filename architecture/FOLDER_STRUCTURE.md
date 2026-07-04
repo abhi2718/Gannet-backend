@@ -8,6 +8,7 @@ sync when you add files.
 ```
 gannet/
 ├── CLAUDE.md                     # Read-first workflow & rules
+├── API.md                        # Full REST API reference (every endpoint)
 ├── architecture/                 # ← design docs (this folder)
 │   ├── ARCHITECTURE.md           # System design & decisions
 │   ├── FOLDER_STRUCTURE.md       # This file
@@ -57,6 +58,7 @@ gannet/
 │   ├── analytics.test.ts         # Analytics routes (admin counts/summary/trends)
 │   ├── order.test.ts             # Order routes (ownership, admin aggregation search)
 │   ├── protected-routes.test.ts  # Real auth guard → 401 checks
+│   ├── api-docs.test.ts          # API.md covers every mounted route (no drift)
 │   └── helpers/mockQuery.ts      # Chainable+awaitable Mongoose query mock
 ├── eslint.config.mjs             # Flat ESLint (max-lines 200, no-unused-vars)
 ├── jest.config.js                # ts-jest config

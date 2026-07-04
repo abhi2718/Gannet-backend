@@ -15,6 +15,23 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Add full API reference (API.md) + doc-coverage test
+- **What:** New root **`API.md`** — a complete REST reference documenting every
+  endpoint (33 across auth/users/products/queries/addresses/orders/analytics/
+  health): auth requirement, path/query params, request body with validation
+  rules + examples, success shape, and every failure/error (400/401/403/404/409/
+  429). Plus global sections: success/error shapes, status-code table, auth,
+  rate limits, pagination, and data models.
+- **Why:** User request — one well-documented, tested document elaborating each
+  endpoint's payload, response, and errors.
+- **Tests:** New `tests/api-docs.test.ts` — asserts each mounted route is
+  documented (`` `METHOD /path` `` token), that the doc lists **exactly** the
+  mounted endpoints (heading count == route count → catches drift when routes are
+  added/removed), and that the key global sections + resource groups + the
+  standard error shape are present. Full suite green.
+- **Notes:** Doc is complementary to the live Swagger UI at `/api-docs`. The
+  drift test keeps API.md in sync with the router going forward.
+
 ## 2026-07-04 — Address: add required `state` field
 - **What:** Added required `state` to the `Address` model (interface + schema,
   indexed like `city`), to `createAddressSchema` (required) and
