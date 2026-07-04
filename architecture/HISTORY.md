@@ -15,6 +15,46 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-04 — Analytics: dense month-aligned trend series for charting
+- **What:** Reshaped `GET /api/analytics/monthly-trends` from sparse
+  `[{ year, month, count }]` arrays into a **dense, plot-ready** shape: a shared
+  `months` axis + `bookings`/`queries` **count arrays aligned to it**, zero-filled
+  for empty months, plus the resolved `year`. `year` now defaults to the current
+  year; the axis runs Jan…current month for the current year, or all 12 months for
+  a past year. Added `lastMonthFor`, `monthRange`, `denseCounts` to
+  `analytics/helpers.ts`; `monthlyPipeline` now always scopes to a concrete year
+  (dropped `toMonthlyPoints`).
+- **Why:** User request — plot a graph of month vs order count and month vs query
+  count; the x-axis must be continuous from January to the current month with 0s
+  for months that have no data.
+- **Tests:** `tests/analytics.test.ts` — rewrote the trends suite: dense current-
+  year series (length = current month, January carries mocked counts); past year
+  → all 12 months with zero-fill; aggregation `$match` scoped to the requested
+  year; out-of-range year → 400; non-admin → 403. Full suite green.
+- **Notes:** Uses UTC throughout (`Date.UTC`, `getUTCMonth`) so the axis is
+  deterministic regardless of server timezone.
+
+## 2026-07-04 — Add Analytics module (admin dashboards: counts, summary, monthly trends)
+- **What:** New `analytics` resource (`routes/analytics/*`) mounted at
+  `/api/analytics`, **admin-only** (`authenticate → authorize(ADMIN)` on the whole
+  router). Three GET endpoints: (1) `/order-status` — `$group` orders by status
+  into a map of every `OrderStatus` → count (missing statuses as 0);
+  (2) `/summary` — `totalOrders`, `pendingOrders`, `deliveredOrders`, `totalUsers`
+  via parallel `countDocuments`; (3) `/monthly-trends` — month-by-month
+  `bookings` (Order) and `queries` (Query) as `[{ year, month, count }]` sorted
+  chronologically for charting, with an optional `year` filter. Pipeline builders
+  + trends schema in `analytics/helpers.ts`.
+- **Why:** User request — admin dashboards: order-status breakdown, platform
+  totals, and month-vs-bookings / month-vs-queries graphs.
+- **Tests:** New `tests/analytics.test.ts` — order-status fills missing statuses
+  with 0 + non-admin 403; summary totals + correct `countDocuments` filters +
+  403; trends shaping, `year` adds a `createdAt` `$match` (range), no year → no
+  match stage, out-of-range year → 400, 403. Added the three routes to
+  `protected-routes.test.ts` (401). 176 tests pass.
+- **Notes:** These reads return small fixed shapes, so they are intentionally not
+  paginated (documented under ARCHITECTURE "Analytics"). Reuses the aggregation
+  approach established for the admin order/user lists.
+
 ## 2026-07-04 — Users: admin-only list + active/inactive status + cross-collection search
 - **What:** (1) Added `UserStatus` enum (`active` | `inactive`, default `active`,
   indexed) + `status` field to `models/user.model.ts`; added `status` and

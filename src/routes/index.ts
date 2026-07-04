@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import addressRoutes from './address';
+import analyticsRoutes from './analytics';
 import authRoutes from './auth';
 import orderRoutes from './order';
 import productRoutes from './product';
@@ -28,5 +29,6 @@ router.use('/products', productRoutes);
 router.use('/queries', queryRoutes);
 router.use('/addresses', addressRoutes);
 router.use('/orders', orderRoutes);
+router.use('/analytics', analyticsRoutes);
 
 export default router;

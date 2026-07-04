@@ -111,6 +111,8 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
 `/api/addresses` (list*[own], create, get, patch, delete — owner-scoped) ·
 `/api/orders` (my-list*, all-list*[admin], create, get, edit[admin],
 patch-status[admin], delete[admin]; lists searchable+filterable) ·
+`/api/analytics` (**admin only**: order-status counts, platform summary,
+monthly bookings/queries trends — for dashboards & charts) ·
 `/api/health`. Endpoints marked `*` are paginated. Full contract: `GET /api-docs`.
 
 ## Cross-collection search (admin lists)
@@ -134,6 +136,24 @@ it only nulls the child — which would break pagination totals):
 Both apply their non-joined filters (`status`, date) in an initial `$match`,
 regex-escape user input (CONVENTIONS §10a), and end with a `$facet` returning the
 page of `data` plus `totalCount` so `find`/`count` totals stay consistent.
+
+## Analytics (admin dashboards & charts)
+
+`src/routes/analytics/` exposes three **admin-only** read endpoints
+(`authenticate → authorize(ADMIN)` on the whole router) for dashboards; none are
+paginated (they return small fixed shapes):
+
+- **`GET /api/analytics/order-status`** — `$group` orders by `status` → a map of
+  every `OrderStatus` to its count (absent statuses reported as 0).
+- **`GET /api/analytics/summary`** — `totalOrders`, `pendingOrders`,
+  `deliveredOrders` (completed) and `totalUsers` via parallel `countDocuments`.
+- **`GET /api/analytics/monthly-trends`** — a **dense** month series for charting:
+  a shared `months` axis (`[1..currentMonth]` for the current year, `[1..12]` for a
+  past year) plus `bookings` (Order) and `queries` (Query) **count arrays aligned
+  to it**, zero-filled for months with no data, plus the resolved `year`. Optional
+  `year` query param (default: current year).
+
+Pipeline builders and the trends query schema live in `analytics/helpers.ts`.
 
 ## Owner-scoped access
 

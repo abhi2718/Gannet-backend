@@ -35,6 +35,9 @@ describe('Protected routes require authentication', () => {
     ['patch', '/api/orders/507f1f77bcf86cd799439011'],
     ['delete', '/api/orders/507f1f77bcf86cd799439011'],
     ['patch', '/api/orders/507f1f77bcf86cd799439011/status'],
+    ['get', '/api/analytics/order-status'],
+    ['get', '/api/analytics/summary'],
+    ['get', '/api/analytics/monthly-trends'],
     ['get', '/api/auth/me'],
   ];
 

@@ -39,7 +39,8 @@ gannet/
 │   │   ├── product/ { index.ts, controller.ts, helpers.ts }
 │   │   ├── query/   { index.ts, controller.ts, helpers.ts }  # public POST + admin list
 │   │   ├── address/ { index.ts, controller.ts, helpers.ts }  # owner-scoped CRUD
-│   │   └── order/   { index.ts, controller.ts, helpers.ts }  # owner-scoped + admin aggregation search
+│   │   ├── order/   { index.ts, controller.ts, helpers.ts }  # owner-scoped + admin aggregation search
+│   │   └── analytics/ { index.ts, controller.ts, helpers.ts }  # admin dashboards (counts/summary/trends)
 │   ├── utils/
 │   │   ├── ApiError.ts           # Typed HTTP error class
 │   │   ├── catchAsync.ts         # Async handler wrapper
@@ -53,6 +54,7 @@ gannet/
 │   ├── query.test.ts             # Query routes (public POST + admin list)
 │   ├── query-ratelimit.test.ts   # Real queryRateLimiter → 429 after 5
 │   ├── address.test.ts           # Address routes (owner-scoped CRUD, pagination)
+│   ├── analytics.test.ts         # Analytics routes (admin counts/summary/trends)
 │   ├── order.test.ts             # Order routes (ownership, admin aggregation search)
 │   ├── protected-routes.test.ts  # Real auth guard → 401 checks
 │   └── helpers/mockQuery.ts      # Chainable+awaitable Mongoose query mock
