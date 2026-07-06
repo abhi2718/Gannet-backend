@@ -4,7 +4,11 @@ import { Order } from '../../models/order.model';
 import { IUser, UserType } from '../../models/user.model';
 import { ApiError } from '../../utils/ApiError';
 import { catchAsync } from '../../utils/catchAsync';
-import { buildAdminOrderPipeline, buildOrderFilter } from './helpers';
+import {
+  buildAdminOrderPipeline,
+  buildOrderFilter,
+  computeTotalAmount,
+} from './helpers';
 
 const buildPagination = (total: number, page: number, limit: number) => ({
   total,
@@ -28,7 +32,9 @@ export const createOrder = catchAsync(async (req: Request, res: Response) => {
   if (!address) {
     throw ApiError.badRequest('address not found or does not belong to you');
   }
-  const order = await Order.create({ ...req.body, user: user.id });
+  // Server owns the total — never trust a client-supplied amount.
+  const totalAmount = computeTotalAmount(req.body.items);
+  const order = await Order.create({ ...req.body, user: user.id, totalAmount });
   res.status(201).json({ success: true, data: order });
 });
 
@@ -102,7 +108,11 @@ export const getOrder = catchAsync(async (req: Request, res: Response) => {
  * PATCH /api/orders/:id — admin edits any order fields (incl. status).
  */
 export const updateOrder = catchAsync(async (req: Request, res: Response) => {
-  const order = await Order.findByIdAndUpdate(req.params.id, req.body, {
+  // If the items change, the stored total must be recomputed to match.
+  const update = req.body.items
+    ? { ...req.body, totalAmount: computeTotalAmount(req.body.items) }
+    : req.body;
+  const order = await Order.findByIdAndUpdate(req.params.id, update, {
     new: true,
     runValidators: true,
   });

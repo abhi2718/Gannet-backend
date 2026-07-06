@@ -16,7 +16,7 @@ import {
 /**
  * GET /api/analytics/my-orders — the current user's own order analytics: how
  * many orders they placed, and how many are delivered / pending / out for
- * delivery, plus total spent = Σ(quantity × amount) across their orders.
+ * delivery, plus total spent = Σ(order totalAmount) across their orders.
  */
 export const myOrderAnalytics = catchAsync(
   async (req: Request, res: Response) => {

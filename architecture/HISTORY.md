@@ -15,6 +15,55 @@ skim this for precedent before making similar changes.
 
 ---
 
+## 2026-07-06 — Orders hold multiple items; public product reads
+- **What:** (1) **Multi-item orders.** Replaced the `Order`'s flat
+  `bottleSize`/`quantity`/`amount` with an `items` subdocument array
+  (`{ bottleSize, quantity, amount }`, ≥1) plus a server-computed `totalAmount`
+  (`src/models/order.model.ts`). `createOrderSchema`/`updateOrderSchema` now take
+  an `items` array; added a pure `computeTotalAmount` helper; both order searches
+  (`buildOrderFilter`, `buildAdminOrderPipeline`) match `items.bottleSize`
+  (`routes/order/helpers.ts`). `createOrder`/`updateOrder` compute/recompute
+  `totalAmount` server-side (`routes/order/controller.ts`); order Swagger updated
+  (`routes/order/index.ts`). Analytics `totalSpent` now `Σ $totalAmount`
+  (`routes/analytics/helpers.ts`). (2) **Public product reads.** `GET
+  /api/products` and `GET /api/products/:id` are now public (per-route
+  `authenticate` on POST/PATCH/DELETE only) so guests can browse the catalogue
+  (`routes/product/index.ts`).
+- **Why:** User request — the storefront cart lets a customer add several bottle
+  sizes, so an order must carry more than one product and the admin/customer order
+  views must show every line. Product reads made public so the landing-page grid
+  loads real products for signed-out visitors.
+- **Tests:** `tests/order.test.ts` — payloads converted to `items[]`; asserts
+  server-computed `totalAmount` (create) and recompute on edit; new 400 cases:
+  missing/empty `items`, item missing `bottleSize`/`quantity`/`amount`, item
+  `quantity < 1`, negative item `amount`; search now matches `items.bottleSize`.
+  `tests/analytics.test.ts` — `totalSpent` asserts `$sum: '$totalAmount'`.
+  `tests/protected-routes.test.ts` — dropped the two product-GET 401 cases (now
+  public), kept POST/PATCH/DELETE. Suites green: order, analytics, product,
+  protected-routes, api-docs (150 tests).
+- **Notes:** Clean breaking change — no backward-compat for the old single-item
+  shape (persistence is mocked in tests; no migration needed). `totalAmount` is
+  authoritative and never trusted from the client. Follow-up: the front-end
+  (`gannet-next`) checkout/order views are updated in the sibling repo.
+
+## 2026-07-06 — Restrict CORS to configured origins (default localhost:3000)
+- **What:** Replaced the wide-open `app.use(cors())` in `src/app.ts` with an
+  origin-restricted `cors({ origin: env.corsOrigins, credentials: true })`. Added a
+  `CORS_ORIGIN` env var (Joi-defaulted to `http://localhost:3000`) to
+  `src/config/env.ts`, parsed into a trimmed, comma-separated `corsOrigins` array,
+  and added it to `.env.example` and `.env`.
+- **Why:** User request — use the `cors` package to allow the cross-origin policy
+  for `localhost:3000` (the dev front-end) instead of every origin.
+- **Tests:** New `tests/cors.test.ts` — allowed origin reflected on a simple
+  request, `Access-Control-Allow-Credentials: true`, a disallowed origin is not
+  reflected, preflight (OPTIONS) answered for the allowed origin, and preflight
+  from a disallowed origin not reflected. Full suite green (238 tests); lint +
+  typecheck clean.
+- **Notes:** `cors` was already a dependency and imported — only its config
+  changed. Origins are configurable/extendable via the comma-separated
+  `CORS_ORIGIN`; `credentials: true` supports cookie-based front-end auth and is
+  compatible with an explicit (non-wildcard) origin.
+
 ## 2026-07-04 — Add full API reference (API.md) + doc-coverage test
 - **What:** New root **`API.md`** — a complete REST reference documenting every
   endpoint (33 across auth/users/products/queries/addresses/orders/analytics/

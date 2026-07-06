@@ -49,7 +49,8 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
   error handler). Kept separate from `index.ts` so tests import the app without
   opening a DB connection or a port.
 - **`src/config/`** — `env.ts` (Joi-validated env, single source of truth — never
-  read `process.env` elsewhere), `db.ts` (Mongo connect/disconnect), `swagger.ts`.
+  read `process.env` elsewhere; parses `CORS_ORIGIN` into the allowed-origins
+  list), `db.ts` (Mongo connect/disconnect), `swagger.ts`.
 - **`src/middlewares/`** — cross-cutting concerns: `auth` (JWT + roles),
   `validate` (Joi), `rateLimiter`, `notFound`, `errorHandler`.
 - **`src/models/`** — Mongoose schemas + document interfaces. Password hashing
@@ -73,6 +74,9 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
   controller trusts that input is already validated and defaulted.
 - **Persistence is mocked in tests** (no live Mongo required); a separate suite
   exercises the real auth middleware. See CONVENTIONS.md → Testing.
+- **CORS is origin-restricted**, not open. `app.ts` configures `cors` with the
+  `CORS_ORIGIN` allow-list (comma-separated; default `http://localhost:3000`) and
+  `credentials: true`, so only the configured front-end origins may read responses.
 
 ## Data models
 
@@ -92,22 +96,25 @@ errorHandler (global)  ──►  consistent JSON error   ·   notFound → 404
   (date of the enquiry, from timestamps). Public submission; admins can list
   (search/filter), edit, and delete.
 - **Order** — `orderId` (auto, unique), `customerName`, `customerPhone`,
-  `bottleSize`, `quantity`, `amount`, `estimatedDelivery` (Date, default +7d),
-  `status` (enum: `pending` → `confirmed` → `out for delivery` → `delivered`, or
-  `cancelled`; default `pending`), `user` (owner ref), `address` (Address ref;
-  verified to belong to the caller on create). Customers see only their own
-  orders; admins see all, and can edit/delete any order. `GET /api/orders/my`
-  filters by name/phone/bottleSize (status, date range). The admin
-  `GET /api/orders` uses an **aggregation pipeline** that `$lookup`s the user and
-  address so a single `search` term matches the order's customer name/phone OR
-  the user's name/email/phone OR any part of the address (see "Cross-collection
-  search" below).
+  `items` (subdocument array of `{ bottleSize, quantity, amount }`, at least one —
+  a single cart may hold several bottle sizes), `totalAmount` (server-computed =
+  Σ `quantity` × `amount` across `items`; never trusted from the client),
+  `estimatedDelivery` (Date, default +7d), `status` (enum: `pending` →
+  `confirmed` → `out for delivery` → `delivered`, or `cancelled`; default
+  `pending`), `user` (owner ref), `address` (Address ref; verified to belong to
+  the caller on create). Customers see only their own orders; admins see all, and
+  can edit/delete any order (editing `items` recomputes `totalAmount`).
+  `GET /api/orders/my` filters by name/phone/any item's bottleSize (status, date
+  range). The admin `GET /api/orders` uses an **aggregation pipeline** that
+  `$lookup`s the user and address so a single `search` term matches the order's
+  customer name/phone, any item's bottle size, OR the user's name/email/phone OR
+  any part of the address (see "Cross-collection search" below).
 
 ## API surface
 
 `/api/auth` (register, login, me) ·
 `/api/users` (list*[admin, search+status-filter], get, patch, delete) ·
-`/api/products` (list*, create, get, patch, delete) ·
+`/api/products` (list*[public], get[public], create/patch/delete[auth]) ·
 `/api/queries` (**POST public+rate-limited**, list*+single-term-search+status-filter/edit/delete admin) ·
 `/api/addresses` (list*[own], create, get, patch, delete — owner-scoped) ·
 `/api/orders` (my-list*, all-list*[admin], create, get, edit[admin],
@@ -124,9 +131,9 @@ so both are built as **aggregation pipelines** rather than `find` + `populate`
 it only nulls the child — which would break pagination totals):
 
 - **`GET /api/orders` (admin)** — `$lookup` + `$unwind` the `user` and `address`,
-  then `$match` a search `$or` across the order's customer name/phone, the user's
-  name/email/phone, and the address fields. Builder: `buildAdminOrderPipeline`
-  in `routes/order/helpers.ts`.
+  then `$match` a search `$or` across the order's customer name/phone, any item's
+  `items.bottleSize`, the user's name/email/phone, and the address fields.
+  Builder: `buildAdminOrderPipeline` in `routes/order/helpers.ts`.
 - **`GET /api/users` (admin)** — `$lookup` the user's `orders` and `addresses`,
   `$addFields` `orderCount` (`$size`) and distinct `cities`, then `$match` a
   search `$or` across name/email/phone/city (and the exact `orderCount` when the
@@ -147,8 +154,8 @@ any authenticated user). None are paginated (they return small fixed shapes):
 
 - **`GET /api/analytics/my-orders`** (any authenticated user) — the caller's own
   order analytics in one aggregation pass: `totalOrders`, `deliveredOrders`,
-  `pendingOrders`, `outForDeliveryOrders`, and `totalSpent` = Σ(`quantity` ×
-  `amount`) over their orders. Scoped by `$match { user: ObjectId(id) }` — note
+  `pendingOrders`, `outForDeliveryOrders`, and `totalSpent` = Σ(`totalAmount`)
+  over their orders. Scoped by `$match { user: ObjectId(id) }` — note
   aggregation does **not** auto-cast the id, so the controller wraps it in
   `new Types.ObjectId(...)` (unlike `find`).
 - **`GET /api/analytics/order-status`** (admin) — `$group` orders by `status` → a
@@ -174,6 +181,9 @@ customer fetching another user's order via `GET /api/orders/:id` gets 403.
 ## Public vs protected endpoints
 
 Most routes require a JWT. Exceptions (`security: []`): `POST /api/auth/register`,
-`POST /api/auth/login`, `GET /api/health`, and **`POST /api/queries`** — the
-public enquiry form. Public write endpoints must be rate-limited; `POST
-/api/queries` uses a dedicated strict `queryRateLimiter` (5/hour per IP).
+`POST /api/auth/login`, `GET /api/health`, **`POST /api/queries`** (the public
+enquiry form), and the **product reads** `GET /api/products` and
+`GET /api/products/:id` (guests browse the catalogue on the landing page; product
+writes — create/update/delete — still require auth, applied per-route). Public
+write endpoints must be rate-limited; `POST /api/queries` uses a dedicated strict
+`queryRateLimiter` (5/hour per IP).

@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { Application } from 'express';
 import mongoSanitize from 'express-mongo-sanitize';
 import helmet from 'helmet';
+import { env } from './config/env';
 import { setupSwagger } from './config/swagger';
 import { errorHandler } from './middlewares/errorHandler';
 import { notFound } from './middlewares/notFound';
@@ -17,7 +18,8 @@ export const createApp = (): Application => {
 
   // Security & parsing middleware.
   app.use(helmet());
-  app.use(cors());
+  // Restrict cross-origin access to the configured origins (default: localhost:3000).
+  app.use(cors({ origin: env.corsOrigins, credentials: true }));
   app.use(express.json({ limit: '10kb' }));
   app.use(express.urlencoded({ extended: true }));
 

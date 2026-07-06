@@ -17,15 +17,15 @@ import {
 
 const router = Router();
 
-// Every product endpoint requires a valid JWT.
-router.use(authenticate);
+// Reading the catalogue is public (guests browse the landing page); creating,
+// updating and deleting a product require a valid JWT (applied per-route below).
 
 /**
  * @openapi
  * /api/products:
  *   get:
  *     tags: [Products]
- *     summary: List products (paginated, page size >= 20)
+ *     summary: List products (public; paginated, page size >= 20)
  *     parameters:
  *       - in: query
  *         name: page
@@ -56,7 +56,7 @@ router.use(authenticate);
 router
   .route('/')
   .get(validate(listProductsQuerySchema, 'query'), listProducts)
-  .post(validate(createProductSchema), createProduct);
+  .post(authenticate, validate(createProductSchema), createProduct);
 
 /**
  * @openapi
@@ -96,10 +96,11 @@ router
   .route('/:id')
   .get(validate(productIdParamSchema, 'params'), getProduct)
   .patch(
+    authenticate,
     validate(productIdParamSchema, 'params'),
     validate(updateProductSchema),
     updateProduct
   )
-  .delete(validate(productIdParamSchema, 'params'), deleteProduct);
+  .delete(authenticate, validate(productIdParamSchema, 'params'), deleteProduct);
 
 export default router;

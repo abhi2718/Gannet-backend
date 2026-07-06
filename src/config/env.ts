@@ -12,6 +12,7 @@ const envSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   PORT: Joi.number().default(5000),
+  CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
   MONGO_URI: Joi.string().required(),
   JWT_SECRET: Joi.string().min(16).required(),
   JWT_EXPIRES_IN: Joi.string().default('1d'),
@@ -30,6 +31,11 @@ if (error) {
 export const env = {
   nodeEnv: envVars.NODE_ENV as string,
   port: envVars.PORT as number,
+  // Allowed CORS origins — comma-separated list (default: the localhost:3000 dev client).
+  corsOrigins: (envVars.CORS_ORIGIN as string)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   mongoUri: envVars.MONGO_URI as string,
   jwt: {
     secret: envVars.JWT_SECRET as string,

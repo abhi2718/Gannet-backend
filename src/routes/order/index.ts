@@ -66,13 +66,21 @@ router.use(authenticate);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [customerName, customerPhone, bottleSize, quantity, amount, address]
+ *             required: [customerName, customerPhone, items, address]
  *             properties:
  *               customerName: { type: string }
  *               customerPhone: { type: string }
- *               bottleSize: { type: string }
- *               quantity: { type: integer, minimum: 1 }
- *               amount: { type: number, minimum: 0 }
+ *               items:
+ *                 type: array
+ *                 minItems: 1
+ *                 description: One or more product lines; totalAmount is computed server-side
+ *                 items:
+ *                   type: object
+ *                   required: [bottleSize, quantity, amount]
+ *                   properties:
+ *                     bottleSize: { type: string }
+ *                     quantity: { type: integer, minimum: 1 }
+ *                     amount: { type: number, minimum: 0, description: per-unit price }
  *               address: { type: string, description: Id of one of the caller's addresses }
  *               estimatedDelivery: { type: string, format: date-time }
  *     responses:
@@ -153,9 +161,16 @@ router.get('/my', validate(listOrdersQuerySchema, 'query'), listMyOrders);
  *             properties:
  *               customerName: { type: string }
  *               customerPhone: { type: string }
- *               bottleSize: { type: string }
- *               quantity: { type: integer, minimum: 1 }
- *               amount: { type: number, minimum: 0 }
+ *               items:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [bottleSize, quantity, amount]
+ *                   properties:
+ *                     bottleSize: { type: string }
+ *                     quantity: { type: integer, minimum: 1 }
+ *                     amount: { type: number, minimum: 0 }
  *               address: { type: string }
  *               estimatedDelivery: { type: string, format: date-time }
  *               status:

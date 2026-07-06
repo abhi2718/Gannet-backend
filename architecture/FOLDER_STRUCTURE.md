@@ -56,6 +56,7 @@ gannet/
 │   ├── query-ratelimit.test.ts   # Real queryRateLimiter → 429 after 5
 │   ├── address.test.ts           # Address routes (owner-scoped CRUD, pagination)
 │   ├── analytics.test.ts         # Analytics routes (admin counts/summary/trends)
+│   ├── cors.test.ts              # CORS policy (allowed origin, credentials, preflight)
 │   ├── order.test.ts             # Order routes (ownership, admin aggregation search)
 │   ├── protected-routes.test.ts  # Real auth guard → 401 checks
 │   ├── api-docs.test.ts          # API.md covers every mounted route (no drift)

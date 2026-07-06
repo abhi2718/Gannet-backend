@@ -1,7 +1,7 @@
 import Joi from 'joi';
 import { PipelineStage } from 'mongoose';
 import { Request } from 'express';
-import { OrderStatus } from '../../models/order.model';
+import { IOrderItem, OrderStatus } from '../../models/order.model';
 
 const objectId = Joi.string()
   .pattern(/^[a-fA-F0-9]{24}$/)
@@ -19,12 +19,23 @@ export const orderIdParamSchema = Joi.object({
   id: objectId.required(),
 });
 
-export const createOrderSchema = Joi.object({
-  customerName: Joi.string().trim().min(2).max(120).required(),
-  customerPhone: phone.required(),
+// A single product line. `amount` is the per-unit price for that bottle size.
+const orderItemSchema = Joi.object({
   bottleSize: Joi.string().trim().min(1).max(60).required(),
   quantity: Joi.number().integer().min(1).required(),
   amount: Joi.number().min(0).required(),
+});
+
+// Σ(quantity × amount) over the order's items — the authoritative order total.
+export const computeTotalAmount = (
+  items: Pick<IOrderItem, 'quantity' | 'amount'>[]
+): number => items.reduce((sum, i) => sum + i.quantity * i.amount, 0);
+
+export const createOrderSchema = Joi.object({
+  customerName: Joi.string().trim().min(2).max(120).required(),
+  customerPhone: phone.required(),
+  // One or more product lines; the cart may hold several bottle sizes.
+  items: Joi.array().items(orderItemSchema).min(1).required(),
   // Reference to one of the current user's saved addresses.
   address: objectId.required(),
   // Optional on create; defaults to now + 7 days at the model layer.
@@ -43,9 +54,7 @@ export const updateOrderStatusSchema = Joi.object({
 export const updateOrderSchema = Joi.object({
   customerName: Joi.string().trim().min(2).max(120).optional(),
   customerPhone: phone.optional(),
-  bottleSize: Joi.string().trim().min(1).max(60).optional(),
-  quantity: Joi.number().integer().min(1).optional(),
-  amount: Joi.number().min(0).optional(),
+  items: Joi.array().items(orderItemSchema).min(1).optional(),
   address: objectId.optional(),
   estimatedDelivery: Joi.date().iso().optional(),
   status: Joi.string()
@@ -91,7 +100,7 @@ export const buildOrderFilter = (
     filter.$or = [
       { customerName: rx },
       { customerPhone: rx },
-      { bottleSize: rx },
+      { 'items.bottleSize': rx },
     ];
   }
   if (q.status) filter.status = q.status;
@@ -142,6 +151,7 @@ export const buildAdminOrderPipeline = (
         $or: [
           { customerName: rx },
           { customerPhone: rx },
+          { 'items.bottleSize': rx },
           { 'user.username': rx },
           { 'user.email': rx },
           { 'user.phoneNumber': rx },

@@ -11,13 +11,22 @@ export enum OrderStatus {
   CANCELLED = 'cancelled',
 }
 
+/**
+ * A single product line within an order. An order may contain many of these
+ * (e.g. different bottle sizes added to the same cart).
+ */
+export interface IOrderItem {
+  bottleSize: string;
+  quantity: number;
+  amount: number;
+}
+
 export interface IOrder extends Document {
   orderId: string;
   customerName: string;
   customerPhone: string;
-  bottleSize: string;
-  quantity: number;
-  amount: number;
+  items: IOrderItem[];
+  totalAmount: number;
   estimatedDelivery: Date;
   status: OrderStatus;
   user: Types.ObjectId;
@@ -32,6 +41,16 @@ const generateOrderId = (): string =>
     .toUpperCase()}`;
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// A product line inside an order. Stored as a subdocument (no own _id).
+const orderItemSchema = new Schema<IOrderItem>(
+  {
+    bottleSize: { type: String, required: true, trim: true, maxlength: 60 },
+    quantity: { type: Number, required: true, min: 1 },
+    amount: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
 
 const orderSchema = new Schema<IOrder>(
   {
@@ -54,19 +73,16 @@ const orderSchema = new Schema<IOrder>(
       trim: true,
       index: true,
     },
-    bottleSize: {
-      type: String,
+    items: {
+      type: [orderItemSchema],
       required: true,
-      trim: true,
-      maxlength: 60,
-      index: true,
+      validate: {
+        validator: (items: IOrderItem[]) =>
+          Array.isArray(items) && items.length > 0,
+        message: 'An order must contain at least one item',
+      },
     },
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-    amount: {
+    totalAmount: {
       type: Number,
       required: true,
       min: 0,

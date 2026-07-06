@@ -28,7 +28,7 @@ const countWhenStatus = (status: OrderStatus) => ({
 
 /**
  * One user's own order stats in a single pass: total, delivered, pending and
- * out-for-delivery counts, plus total spent = Σ(quantity × amount) across their
+ * out-for-delivery counts, plus total spent = Σ(order totalAmount) across their
  * orders. `userId` is cast to an ObjectId (aggregation does not auto-cast).
  */
 export const myOrderStatsPipeline = (userId: string): PipelineStage[] => [
@@ -40,7 +40,7 @@ export const myOrderStatsPipeline = (userId: string): PipelineStage[] => [
       deliveredOrders: countWhenStatus(OrderStatus.DELIVERED),
       pendingOrders: countWhenStatus(OrderStatus.PENDING),
       outForDeliveryOrders: countWhenStatus(OrderStatus.OUT_FOR_DELIVERY),
-      totalSpent: { $sum: { $multiply: ['$quantity', '$amount'] } },
+      totalSpent: { $sum: '$totalAmount' },
     },
   },
 ];

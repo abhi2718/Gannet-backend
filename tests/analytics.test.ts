@@ -85,16 +85,14 @@ describe('GET /api/analytics/my-orders', () => {
     });
   });
 
-  it('scopes the aggregation to the caller and sums quantity × amount', async () => {
+  it('scopes the aggregation to the caller and sums per-order totalAmount', async () => {
     (Order.aggregate as jest.Mock).mockResolvedValue([]);
 
     await request(app).get('/api/analytics/my-orders');
 
     const pipeline = (Order.aggregate as jest.Mock).mock.calls[0][0];
     expect(pipeline[0].$match.user.toString()).toBe(USER_ID);
-    expect(pipeline[1].$group.totalSpent.$sum).toEqual({
-      $multiply: ['$quantity', '$amount'],
-    });
+    expect(pipeline[1].$group.totalSpent.$sum).toBe('$totalAmount');
   });
 
   it('returns zeros when the user has no orders', async () => {

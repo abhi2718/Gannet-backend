@@ -13,9 +13,8 @@ describe('Protected routes require authentication', () => {
     ['get', '/api/users/507f1f77bcf86cd799439011'],
     ['patch', '/api/users/507f1f77bcf86cd799439011'],
     ['delete', '/api/users/507f1f77bcf86cd799439011'],
-    ['get', '/api/products'],
+    // Product GETs are public (guests browse the catalogue); only writes need auth.
     ['post', '/api/products'],
-    ['get', '/api/products/507f1f77bcf86cd799439011'],
     ['patch', '/api/products/507f1f77bcf86cd799439011'],
     ['delete', '/api/products/507f1f77bcf86cd799439011'],
     // Public query submission (POST) is intentionally excluded; only the

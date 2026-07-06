@@ -4,7 +4,7 @@ Complete reference for the Gannet REST API — every endpoint, its authenticatio
 request payload (with validation rules), success response, and every failure/error
 it can return.
 
-- **Base URL:** all routes are mounted under `/api` (e.g. `http://localhost:5000/api`).
+- **Base URL:** all routes are mounted under `/api` (e.g. `http://localhost:4000/api`).
 - **Content type:** requests and responses are JSON (`Content-Type: application/json`).
   The JSON body is capped at **10 kb**.
 - **Interactive docs:** a live Swagger UI is served at **`GET /api-docs`**.
@@ -122,7 +122,9 @@ write-only and never returned.
 `landmark` (optional), `user` (owner ref), timestamps.
 
 **Order** — `orderId` (auto, unique), `customerName`, `customerPhone`,
-`bottleSize`, `quantity`, `amount`, `estimatedDelivery`, `status`
+`items` (array of `{ bottleSize, quantity, amount }`, at least one — a cart may
+hold several bottle sizes), `totalAmount` (server-computed = Σ `quantity` ×
+`amount`; the client never sends it), `estimatedDelivery`, `status`
 (`pending`|`confirmed`|`out for delivery`|`delivered`|`cancelled`, default
 `pending`), `user` (owner ref), `address` (ref), timestamps.
 
@@ -229,15 +231,17 @@ Errors: **400**, **401**, **403**, **404**.
 
 ## Products  `/api/products`
 
-All product endpoints require authentication.
+Reading the catalogue is **public** (`GET /api/products`, `GET /api/products/:id`)
+so guests can browse the landing page; creating, updating and deleting a product
+require authentication.
 
-### `GET /api/products` — List products
+### `GET /api/products` — List products (public)
 
-Query params: `page`, `limit`. **200** → paginated list. Errors: **400**, **401**.
+Query params: `page`, `limit`. **200** → paginated list. Errors: **400**.
 
 ### `POST /api/products` — Create a product
 
-Body:
+**Auth:** required. Body:
 
 | Field | Type | Required | Rules |
 | --- | --- | --- | --- |
@@ -248,18 +252,18 @@ Body:
 
 **201** → created product. Errors: **400**, **401**.
 
-### `GET /api/products/:id` — Get a product
+### `GET /api/products/:id` — Get a product (public)
 
-**200** → product. Errors: **400** (bad id), **401**, **404** `Product not found`.
+**200** → product. Errors: **400** (bad id), **404** `Product not found`.
 
 ### `PATCH /api/products/:id` — Update a product
 
-Body — at least one of `productName`, `url`, `price`, `description`.
+**Auth:** required. Body — at least one of `productName`, `url`, `price`, `description`.
 **200** → updated product. Errors: **400**, **401**, **404**.
 
 ### `DELETE /api/products/:id` — Delete a product
 
-**200** → `{ success, data: null }`. Errors: **400**, **401**, **404**.
+**Auth:** required. **200** → `{ success, data: null }`. Errors: **400**, **401**, **404**.
 
 ---
 
@@ -369,20 +373,37 @@ Body:
 | --- | --- | --- | --- |
 | `customerName` | string | yes | 2–120 |
 | `customerPhone` | string | yes | phone pattern |
-| `bottleSize` | string | yes | 1–60 |
-| `quantity` | integer | yes | ≥ 1 |
-| `amount` | number | yes | ≥ 0 |
+| `items` | array | yes | **at least one** item (see below) |
+| `items[].bottleSize` | string | yes | 1–60 |
+| `items[].quantity` | integer | yes | ≥ 1 |
+| `items[].amount` | number | yes | ≥ 0 (per-unit price) |
 | `address` | string (id) | yes | 24-hex id of one of the caller's addresses |
 | `estimatedDelivery` | string (ISO date) | no | defaults to now + 7 days |
 
-**201** → created order (owned by the caller, `status: "pending"`).
-Errors: **400** (validation, or `address not found or does not belong to you`), **401**.
+`totalAmount` is **computed server-side** (Σ `quantity` × `amount`) — any value
+sent by the client is ignored.
+
+```json
+{
+  "customerName": "Jane",
+  "customerPhone": "+12025550123",
+  "items": [
+    { "bottleSize": "500 ml", "quantity": 12, "amount": 18 },
+    { "bottleSize": "1 Litre", "quantity": 6, "amount": 32 }
+  ],
+  "address": "507f1f77bcf86cd799439099"
+}
+```
+
+**201** → created order (owned by the caller, `status: "pending"`, with
+`totalAmount`). Errors: **400** (validation — incl. missing/empty `items` or an
+item missing a field — or `address not found or does not belong to you`), **401**.
 
 ### `GET /api/orders` — List all orders (admin)
 
 **Auth:** admin only. Aggregation search that joins the user and address, so a
-single `search` term matches the order's customer name/phone **or** the user's
-name/email/phone **or** any part of the delivery address.
+single `search` term matches the order's customer name/phone, any item's bottle
+size, **or** the user's name/email/phone **or** any part of the delivery address.
 
 Query params: `page`, `limit`, plus:
 
@@ -398,8 +419,8 @@ Query params: `page`, `limit`, plus:
 ### `GET /api/orders/my` — List my orders
 
 **Auth:** required. Returns only the caller's orders. Same `page`/`limit`/`search`/
-`status`/`dateFrom`/`dateTo` params (search matches customerName/phone/bottleSize).
-**200** → paginated list. Errors: **400**, **401**.
+`status`/`dateFrom`/`dateTo` params (search matches customerName/phone or any
+item's bottleSize). **200** → paginated list. Errors: **400**, **401**.
 
 ### `GET /api/orders/:id` — Get an order
 
@@ -410,8 +431,9 @@ Errors: **400** (bad id), **401**, **403** `You can only access your own orders`
 ### `PATCH /api/orders/:id` — Edit an order (admin)
 
 **Auth:** admin only. Body — at least one of `customerName`, `customerPhone`,
-`bottleSize`, `quantity`, `amount`, `address`, `estimatedDelivery`, `status`.
-**200** → updated order. Errors: **400**, **401**, **403**, **404**.
+`items` (array of `{ bottleSize, quantity, amount }`, non-empty), `address`,
+`estimatedDelivery`, `status`. When `items` change, `totalAmount` is recomputed
+server-side. **200** → updated order. Errors: **400**, **401**, **403**, **404**.
 
 ### `PATCH /api/orders/:id/status` — Update status (admin)
 
@@ -443,8 +465,8 @@ admin only. None are paginated.
 } }
 ```
 
-`totalSpent` = Σ(`quantity` × `amount`) over the caller's orders.
-Errors: **401**.
+`totalSpent` = Σ(`totalAmount`) over the caller's orders (each order's
+`totalAmount` is itself Σ `quantity` × `amount` across its items). Errors: **401**.
 
 ### `GET /api/analytics/order-status` — Order status counts (admin)
 

@@ -56,12 +56,15 @@ import { makeQuery } from './helpers/mockQuery';
 const app = createApp();
 const VALID_ID = '507f1f77bcf86cd799439011';
 const ADDRESS_ID = '507f1f77bcf86cd799439099';
+// Two product lines → total = 2*50 + 3*10 = 130.
+const validItems = [
+  { bottleSize: '20L', quantity: 2, amount: 50 },
+  { bottleSize: '1L', quantity: 3, amount: 10 },
+];
 const validBody = {
   customerName: 'John Doe',
   customerPhone: '+12025550123',
-  bottleSize: '20L',
-  quantity: 2,
-  amount: 49.99,
+  items: validItems,
   address: ADDRESS_ID,
 };
 
@@ -90,25 +93,44 @@ describe('POST /api/orders', () => {
       _id: ADDRESS_ID,
       user: 'user1',
     });
+    // Server computes the total (Σ quantity × amount) — never trusts the client.
     expect(Order.create).toHaveBeenCalledWith(
-      expect.objectContaining({ ...validBody, user: 'user1' })
+      expect.objectContaining({ ...validBody, user: 'user1', totalAmount: 130 })
     );
   });
 
-  it.each([
-    'customerName',
-    'customerPhone',
-    'bottleSize',
-    'quantity',
-    'amount',
-    'address',
-  ])('rejects when required field "%s" is missing', async (field) => {
-    const body: Record<string, unknown> = { ...validBody };
-    delete body[field];
-    const res = await request(app).post('/api/orders').send(body);
+  it.each(['customerName', 'customerPhone', 'items', 'address'])(
+    'rejects when required field "%s" is missing',
+    async (field) => {
+      const body: Record<string, unknown> = { ...validBody };
+      delete body[field];
+      const res = await request(app).post('/api/orders').send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain(field);
+      expect(Order.create).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects an empty items array', async () => {
+    const res = await request(app)
+      .post('/api/orders')
+      .send({ ...validBody, items: [] });
     expect(res.status).toBe(400);
-    expect(res.body.message).toContain(field);
+    expect(Order.create).not.toHaveBeenCalled();
   });
+
+  it.each(['bottleSize', 'quantity', 'amount'])(
+    'rejects when an item is missing "%s"',
+    async (field) => {
+      const item: Record<string, unknown> = { ...validItems[0] };
+      delete item[field];
+      const res = await request(app)
+        .post('/api/orders')
+        .send({ ...validBody, items: [item] });
+      expect(res.status).toBe(400);
+      expect(Order.create).not.toHaveBeenCalled();
+    }
+  );
 
   it('rejects a malformed address id', async () => {
     const res = await request(app)
@@ -126,18 +148,20 @@ describe('POST /api/orders', () => {
     expect(Order.create).not.toHaveBeenCalled();
   });
 
-  it('rejects a quantity below 1', async () => {
+  it('rejects an item quantity below 1', async () => {
     const res = await request(app)
       .post('/api/orders')
-      .send({ ...validBody, quantity: 0 });
+      .send({ ...validBody, items: [{ bottleSize: '20L', quantity: 0, amount: 5 }] });
     expect(res.status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
   });
 
-  it('rejects a negative amount', async () => {
+  it('rejects a negative item amount', async () => {
     const res = await request(app)
       .post('/api/orders')
-      .send({ ...validBody, amount: -5 });
+      .send({ ...validBody, items: [{ bottleSize: '20L', quantity: 1, amount: -5 }] });
     expect(res.status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid estimatedDelivery date', async () => {
@@ -182,7 +206,7 @@ describe('GET /api/orders/my (own orders, paginated)', () => {
     expect(Order.find).not.toHaveBeenCalled();
   });
 
-  it('searches own orders by name/phone/bottleSize + status + date', async () => {
+  it('searches own orders by name/phone/item bottleSize + status + date', async () => {
     const query = makeQuery([]);
     (Order.find as jest.Mock).mockReturnValue(query);
     (Order.countDocuments as jest.Mock).mockResolvedValue(0);
@@ -197,6 +221,7 @@ describe('GET /api/orders/my (own orders, paginated)', () => {
     expect(arg.status).toBe('confirmed');
     expect(arg.$or).toHaveLength(3);
     expect(arg.$or[0].customerName.$regex).toBe('John');
+    expect(arg.$or[2]['items.bottleSize'].$regex).toBe('John');
     expect(arg.createdAt.$gte).toBeInstanceOf(Date);
     expect(arg.createdAt.$lte).toBeInstanceOf(Date);
   });
@@ -259,6 +284,7 @@ describe('GET /api/orders (all orders, admin only, aggregation search)', () => {
       expect.arrayContaining([
         'customerName',
         'customerPhone',
+        'items.bottleSize',
         'user.username',
         'user.email',
         'user.phoneNumber',
@@ -394,21 +420,40 @@ describe('PATCH /api/orders/:id (admin edit)', () => {
   it('lets an admin edit order fields', async () => {
     (Order.findByIdAndUpdate as jest.Mock).mockResolvedValue({
       id: 'o1',
-      bottleSize: '10L',
       status: 'cancelled',
     });
 
     const res = await request(app)
       .patch(`/api/orders/${VALID_ID}`)
-      .send({ bottleSize: '10L', status: 'cancelled' });
+      .send({ customerName: 'Jane Roe', status: 'cancelled' });
 
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('cancelled');
   });
 
+  it('recomputes totalAmount when items are edited', async () => {
+    (Order.findByIdAndUpdate as jest.Mock).mockResolvedValue({ id: 'o1' });
+
+    await request(app)
+      .patch(`/api/orders/${VALID_ID}`)
+      .send({ items: [{ bottleSize: '5L', quantity: 4, amount: 25 }] });
+
+    // 4 * 25 = 100 is written alongside the new items.
+    const update = (Order.findByIdAndUpdate as jest.Mock).mock.calls[0][1];
+    expect(update.totalAmount).toBe(100);
+  });
+
   it('rejects an empty update body', async () => {
     const res = await request(app).patch(`/api/orders/${VALID_ID}`).send({});
     expect(res.status).toBe(400);
+  });
+
+  it('rejects an empty items array on edit', async () => {
+    const res = await request(app)
+      .patch(`/api/orders/${VALID_ID}`)
+      .send({ items: [] });
+    expect(res.status).toBe(400);
+    expect(Order.findByIdAndUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid status', async () => {
@@ -422,14 +467,14 @@ describe('PATCH /api/orders/:id (admin edit)', () => {
     (Order.findByIdAndUpdate as jest.Mock).mockResolvedValue(null);
     const res = await request(app)
       .patch(`/api/orders/${VALID_ID}`)
-      .send({ amount: 10 });
+      .send({ customerName: 'Jane Roe' });
     expect(res.status).toBe(404);
   });
 
   it('returns 400 for a malformed id', async () => {
     const res = await request(app)
       .patch('/api/orders/not-an-id')
-      .send({ amount: 10 });
+      .send({ customerName: 'Jane Roe' });
     expect(res.status).toBe(400);
   });
 
@@ -437,7 +482,7 @@ describe('PATCH /api/orders/:id (admin edit)', () => {
     mockAuthState.user = { id: 'user1', userType: 'customer' };
     const res = await request(app)
       .patch(`/api/orders/${VALID_ID}`)
-      .send({ amount: 10 });
+      .send({ customerName: 'Jane Roe' });
     expect(res.status).toBe(403);
     expect(Order.findByIdAndUpdate).not.toHaveBeenCalled();
   });
