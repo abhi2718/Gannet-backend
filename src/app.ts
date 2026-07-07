@@ -19,7 +19,10 @@ export const createApp = (): Application => {
   // Security & parsing middleware.
   app.use(helmet());
   // Restrict cross-origin access to the configured origins (default: localhost:3000).
-  app.use(cors({ origin: env.corsOrigins, credentials: true }));
+  // A `*` entry means "allow any origin": reflect the request origin so it still
+  // works alongside `credentials: true` (a literal `*` is invalid with credentials).
+  const corsOrigin = env.corsOrigins.includes('*') ? true : env.corsOrigins;
+  app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(express.json({ limit: '10kb' }));
   app.use(express.urlencoded({ extended: true }));
 

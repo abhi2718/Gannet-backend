@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Node.js + Express + MongoDB REST API written in TypeScript",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

@@ -1,0 +1,34 @@
+# Render Blueprint for the gannet Express + MongoDB (TypeScript) API.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# On Render: New + > Blueprint > connect the Gannet-backend repo. Render reads
+# this file, creates the service, then prompts you for the secret env vars below
+# (those marked `sync: false`). MongoDB is hosted separately on MongoDB Atlas
+# (free M0 tier) — put its connection string in MONGO_URI.
+services:
+  - type: web
+    name: gannet-api
+    runtime: node
+    plan: free
+    region: oregon # change to the region closest to you / your DB
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is provided automatically by Render — do not set it here.
+      - key: CORS_ORIGIN # `*` = allow any origin
+        value: "*"
+      # --- Secrets: set these in the Render dashboard, NOT here (never commit them) ---
+      - key: MONGO_URI # MongoDB Atlas connection string (secret)
+        sync: false
+      - key: JWT_SECRET # min 16 chars (secret)
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_MAX
+        value: "100"
