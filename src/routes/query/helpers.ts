@@ -13,7 +13,13 @@ export const queryIdParamSchema = Joi.object({
 });
 
 export const createQuerySchema = Joi.object({
-  fullName: Joi.string().trim().min(2).max(120).required(),
+  fullName: Joi.string()
+    .trim()
+    .min(2)
+    .max(120)
+    .pattern(/^[A-Za-z][A-Za-z\s.'-]*$/)
+    .required()
+    .messages({ 'string.pattern.base': 'fullName can only contain letters' }),
   mobileNumber: Joi.string()
     .trim()
     .pattern(/^\+?[0-9\s\-()]{7,20}$/)
@@ -27,15 +33,31 @@ export const createQuerySchema = Joi.object({
     .required()
     .messages({ 'string.email': 'Email must be a valid email' }),
   city: Joi.string().trim().min(2).max(120).required(),
-  requirement: Joi.string().trim().min(3).max(120).required(),
-  message: Joi.string().trim().min(3).max(2000).required(),
+  requirement: Joi.string()
+    .trim()
+    .min(10)
+    .max(120)
+    .required()
+    .messages({ 'string.min': 'Requirement length must be at least 10 characters' }),
+  message: Joi.string()
+    .trim()
+    .min(10)
+    .max(2000)
+    .required()
+    .messages({ 'string.min': 'Message length must be at least 10 characters long' }),
 });
 
 /**
  * Admin edit: any subset of fields (at least one) plus the workflow status.
  */
 export const updateQuerySchema = Joi.object({
-  fullName: Joi.string().trim().min(2).max(120).optional(),
+  fullName: Joi.string()
+    .trim()
+    .min(2)
+    .max(120)
+    .pattern(/^[A-Za-z][A-Za-z\s.'-]*$/)
+    .optional()
+    .messages({ 'string.pattern.base': 'fullName can only contain letters' }),
   mobileNumber: Joi.string()
     .trim()
     .pattern(/^\+?[0-9\s\-()]{7,20}$/)
@@ -49,8 +71,18 @@ export const updateQuerySchema = Joi.object({
     .optional()
     .messages({ 'string.email': 'Email must be a valid email' }),
   city: Joi.string().trim().min(2).max(120).optional(),
-  requirement: Joi.string().trim().min(3).max(120).optional(),
-  message: Joi.string().trim().min(3).max(2000).optional(),
+  requirement: Joi.string()
+    .trim()
+    .min(10)
+    .max(120)
+    .optional()
+    .messages({ 'string.min': 'Requirement length must be at least 10 characters' }),
+  message: Joi.string()
+    .trim()
+    .min(10)
+    .max(2000)
+    .optional()
+    .messages({ 'string.min': 'Message length must be at least 10 characters long' }),
   status: Joi.string()
     .valid(...Object.values(QueryStatus))
     .optional(),

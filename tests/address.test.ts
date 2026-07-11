@@ -46,6 +46,7 @@ const validBody = {
   pinCode: '110011',
   city: 'London',
   state: 'Greater London',
+  landmark: 'Near the station',
 };
 
 // A stored address document owned by `user1` with save/delete spies.
@@ -74,7 +75,7 @@ describe('POST /api/addresses', () => {
     );
   });
 
-  it('accepts an optional landmark', async () => {
+  it('persists the landmark', async () => {
     (Address.create as jest.Mock).mockResolvedValue({ id: 'addr1' });
     const res = await request(app)
       .post('/api/addresses')
@@ -85,7 +86,27 @@ describe('POST /api/addresses', () => {
     );
   });
 
-  it.each(['label', 'street', 'pinCode', 'city', 'state'])(
+  it('rejects an empty landmark', async () => {
+    const res = await request(app)
+      .post('/api/addresses')
+      .send({ ...validBody, landmark: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toMatch(/landmark/i);
+    expect(Address.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a field shorter than 4 characters', async () => {
+    const res = await request(app)
+      .post('/api/addresses')
+      .send({ ...validBody, city: 'Goa' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toMatch(/city.*at least 4/i);
+    expect(Address.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['label', 'street', 'pinCode', 'city', 'state', 'landmark'])(
     'rejects when required field "%s" is missing',
     async (field) => {
       const body: Record<string, unknown> = { ...validBody };

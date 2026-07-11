@@ -97,6 +97,40 @@ describe('POST /api/queries (public submission)', () => {
     expect(res.body.message).toMatch(/mobileNumber/i);
   });
 
+  it('rejects a message shorter than 10 characters with a friendly message', async () => {
+    const res = await request(app)
+      .post('/api/queries')
+      .send({ ...validBody, message: 'too short' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'Message length must be at least 10 characters long'
+    );
+    expect(Query.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a requirement shorter than 10 characters with a friendly message', async () => {
+    const res = await request(app)
+      .post('/api/queries')
+      .send({ ...validBody, requirement: 'bulk' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'Requirement length must be at least 10 characters'
+    );
+    expect(Query.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a full name that contains digits', async () => {
+    const res = await request(app)
+      .post('/api/queries')
+      .send({ ...validBody, fullName: 'John 007' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('fullName can only contain letters');
+    expect(Query.create).not.toHaveBeenCalled();
+  });
+
   it('rejects a message longer than 2000 characters', async () => {
     const res = await request(app)
       .post('/api/queries')
