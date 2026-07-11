@@ -21,7 +21,11 @@ export const createQuerySchema = Joi.object({
     .messages({
       'string.pattern.base': 'mobileNumber must be a valid phone number',
     }),
-  email: Joi.string().email().lowercase().required(),
+  email: Joi.string()
+    .email()
+    .lowercase()
+    .required()
+    .messages({ 'string.email': 'Email must be a valid email' }),
   city: Joi.string().trim().min(2).max(120).required(),
   requirement: Joi.string().trim().min(3).max(120).required(),
   message: Joi.string().trim().min(3).max(2000).required(),
@@ -39,7 +43,11 @@ export const updateQuerySchema = Joi.object({
       'string.pattern.base': 'mobileNumber must be a valid phone number',
     })
     .optional(),
-  email: Joi.string().email().lowercase().optional(),
+  email: Joi.string()
+    .email()
+    .lowercase()
+    .optional()
+    .messages({ 'string.email': 'Email must be a valid email' }),
   city: Joi.string().trim().min(2).max(120).optional(),
   requirement: Joi.string().trim().min(3).max(120).optional(),
   message: Joi.string().trim().min(3).max(2000).optional(),

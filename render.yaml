@@ -12,7 +12,9 @@ services:
     plan: free
     region: oregon # change to the region closest to you / your DB
     branch: main
-    buildCommand: npm install && npm run build
+    # --include=dev forces devDependencies (typescript/tsc) even when
+    # NODE_ENV=production, so `tsc` is available to compile the build.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:

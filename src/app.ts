@@ -6,7 +6,7 @@ import { env } from './config/env';
 import { setupSwagger } from './config/swagger';
 import { errorHandler } from './middlewares/errorHandler';
 import { notFound } from './middlewares/notFound';
-import { apiRateLimiter } from './middlewares/rateLimiter';
+//import { apiRateLimiter } from './middlewares/rateLimiter';
 import routes from './routes';
 
 /**
@@ -30,7 +30,7 @@ export const createApp = (): Application => {
   app.use(mongoSanitize());
 
   // Global rate limiting.
-  app.use(apiRateLimiter);
+  // app.use(apiRateLimiter);
 
   // API documentation.
   setupSwagger(app);

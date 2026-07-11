@@ -6,7 +6,11 @@ import { UserType } from '../../models/user.model';
  */
 export const registerSchema = Joi.object({
   username: Joi.string().trim().min(3).max(50).required(),
-  email: Joi.string().email().lowercase().required(),
+  email: Joi.string()
+    .email()
+    .lowercase()
+    .required()
+    .messages({ 'string.email': 'Email must be a valid email' }),
   phoneNumber: Joi.string()
     .trim()
     .pattern(/^\+?[0-9\s\-()]{7,20}$/)
@@ -21,6 +25,10 @@ export const registerSchema = Joi.object({
 });
 
 export const loginSchema = Joi.object({
-  email: Joi.string().email().lowercase().required(),
+  email: Joi.string()
+    .email()
+    .lowercase()
+    .required()
+    .messages({ 'string.email': 'Email must be a valid email' }),
   password: Joi.string().min(6).max(128).required(),
 });

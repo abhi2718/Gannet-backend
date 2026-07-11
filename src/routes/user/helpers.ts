@@ -21,7 +21,11 @@ export const userIdParamSchema = Joi.object({
 
 export const updateUserSchema = Joi.object({
   username: Joi.string().trim().min(3).max(50).optional(),
-  email: Joi.string().email().lowercase().optional(),
+  email: Joi.string()
+    .email()
+    .lowercase()
+    .optional()
+    .messages({ 'string.email': 'Email must be a valid email' }),
   phoneNumber: phone.optional(),
   userType: Joi.string()
     .valid(...Object.values(UserType))
