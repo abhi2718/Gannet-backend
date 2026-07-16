@@ -163,6 +163,37 @@ describe('POST /api/queries (public submission)', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('Invalid JSON payload in request body');
   });
+
+  it('defaults the type to "query" when omitted', async () => {
+    (Query.create as jest.Mock).mockResolvedValue({ id: 'q1', ...validBody });
+
+    await request(app).post('/api/queries').send(validBody);
+
+    const arg = (Query.create as jest.Mock).mock.calls[0][0];
+    expect(arg.type).toBe('query');
+  });
+
+  it('persists an explicit "dealership" type from the dealership form', async () => {
+    (Query.create as jest.Mock).mockResolvedValue({ id: 'q1', ...validBody });
+
+    const res = await request(app)
+      .post('/api/queries')
+      .send({ ...validBody, type: 'dealership' });
+
+    expect(res.status).toBe(201);
+    const arg = (Query.create as jest.Mock).mock.calls[0][0];
+    expect(arg.type).toBe('dealership');
+  });
+
+  it('rejects an invalid type value', async () => {
+    const res = await request(app)
+      .post('/api/queries')
+      .send({ ...validBody, type: 'spam' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/type/i);
+    expect(Query.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/queries (admin, paginated)', () => {
@@ -256,6 +287,25 @@ describe('GET /api/queries (single-term search + status filter)', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/status/i);
+    expect(Query.find).not.toHaveBeenCalled();
+  });
+
+  it('filters the list by enquiry type', async () => {
+    const query = makeQuery([]);
+    (Query.find as jest.Mock).mockReturnValue(query);
+    (Query.countDocuments as jest.Mock).mockResolvedValue(0);
+
+    await request(app).get('/api/queries?type=dealership');
+
+    const arg = (Query.find as jest.Mock).mock.calls[0][0];
+    expect(arg.type).toBe('dealership');
+  });
+
+  it('rejects an invalid type filter value', async () => {
+    const res = await request(app).get('/api/queries?type=spam');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/type/i);
     expect(Query.find).not.toHaveBeenCalled();
   });
 });

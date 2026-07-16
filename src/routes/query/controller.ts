@@ -26,6 +26,7 @@ const buildQueryFilter = (q: Request['query']): Record<string, unknown> => {
     ];
   }
   if (q.status) filter.status = q.status;
+  if (q.type) filter.type = q.type;
   return filter;
 };
 

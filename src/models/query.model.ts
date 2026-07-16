@@ -13,6 +13,15 @@ export enum QueryStatus {
   CONVERTED = 'converted',
 }
 
+/**
+ * Where the enquiry originated: the dealership inquiry form vs. the general
+ * "need water" popup. Shown as a column in the admin queries table.
+ */
+export enum QueryType {
+  QUERY = 'query',
+  DEALERSHIP = 'dealership',
+}
+
 export interface IQuery extends Document {
   fullName: string;
   mobileNumber: string;
@@ -20,6 +29,7 @@ export interface IQuery extends Document {
   city: string;
   requirement: string;
   message: string;
+  type: QueryType;
   status: QueryStatus;
 }
 
@@ -59,6 +69,12 @@ const querySchema = new Schema<IQuery>(
       required: true,
       trim: true,
       maxlength: 2000,
+    },
+    type: {
+      type: String,
+      enum: Object.values(QueryType),
+      default: QueryType.QUERY,
+      index: true,
     },
     status: {
       type: String,

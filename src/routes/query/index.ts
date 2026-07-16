@@ -39,6 +39,7 @@ const router = Router();
  *               city: { type: string }
  *               requirement: { type: string, maxLength: 120 }
  *               message: { type: string, maxLength: 2000 }
+ *               type: { type: string, enum: [query, dealership], default: query }
  *     responses:
  *       201: { description: Query submitted }
  *       400: { description: Validation error }
@@ -66,6 +67,9 @@ router.post('/', queryRateLimiter, validate(createQuerySchema), createQuery);
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [new, contacted, converted] }
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [query, dealership] }
  *     responses:
  *       200: { description: Paginated list of queries }
  *       401: { description: Unauthorized }

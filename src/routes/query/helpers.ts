@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { QueryStatus } from '../../models/query.model';
+import { QueryStatus, QueryType } from '../../models/query.model';
 
 const objectId = Joi.string()
   .pattern(/^[a-fA-F0-9]{24}$/)
@@ -45,6 +45,9 @@ export const createQuerySchema = Joi.object({
     .max(2000)
     .required()
     .messages({ 'string.min': 'Message length must be at least 10 characters long' }),
+  type: Joi.string()
+    .valid(...Object.values(QueryType))
+    .default(QueryType.QUERY),
 });
 
 /**
@@ -103,5 +106,8 @@ export const listQueriesQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).optional(),
   status: Joi.string()
     .valid(...Object.values(QueryStatus))
+    .optional(),
+  type: Joi.string()
+    .valid(...Object.values(QueryType))
     .optional(),
 });
